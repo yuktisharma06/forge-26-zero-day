@@ -92,10 +92,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const weatherSummary: WeatherSummary = weatherResult.weather;
     const weatherWarnings: string[] = [];
+    let weatherIsStale = false;
 
     // Data-quality checks — only meaningful for live data.
     if (!weatherResult.is_fallback) {
       if (isWeatherDataStale(weatherSummary)) {
+        weatherIsStale = true;
         weatherWarnings.push(
           'Weather data appears anchored to a past date and may not reflect current conditions.',
         );
@@ -116,6 +118,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       growth_stage: farmerInput.growth_stage,
       daily_forecast: weatherSummary.daily,
       is_fallback: weatherResult.is_fallback,
+      is_stale: weatherIsStale,
     });
 
     // ── TODO (Phase D): Call Gemini for advisory text ────────────────────────
@@ -146,7 +149,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
         // ── Risk engine output ───────────────────────────────────────────────
         risk_engine_status: riskResult.status,
         risk_engine_status_message: riskResult.status_message ?? null,
+        forecast_window: riskResult.forecast_window,
+        rules_evaluated: riskResult.rules_evaluated,
         detected_risks: riskResult.detected_risks,
+        not_assessed_risks: riskResult.not_assessed,
         generated_at: new Date().toISOString(),
       }),
       {

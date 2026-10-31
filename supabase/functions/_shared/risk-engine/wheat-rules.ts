@@ -1,194 +1,161 @@
 // =============================================================================
-// Wheat Risk Rules
+// Wheat risk rules
 // =============================================================================
-// Sources:
-//   [KALP] IMD KALP Operational Framework
-//          https://mausam.imd.gov.in/imd_latest/contents/agromet/kalp/kalp.pdf
-//   [MAUSAM-W] IMD MAUSAM — Climatic Impacts on Wheat in Uttar Pradesh
-//              https://mausamjournal.imd.gov.in/index.php/MAUSAM/article/view/1179
+// Every tier points at a source in sources.ts. The THRESHOLD comes from the
+// source; the Low/Moderate/High LABEL is the engine's documented mapping
+// (see `severity_basis` on each tier) and should be confirmed with a local
+// agronomist (KVK / ICAR-IIWBR) before operational use.
 //
-// CRITICAL — validation_status rules:
-//   'validated'            → automated Low/Moderate/High severity is applied
-//   'research_observation' → qualitative "Potential Risk" warning only
-//   'pending_validation'   → qualitative warning; needs local KVK/ICAR confirmation
-//
-// DO NOT add rules without a verifiable agricultural source.
-// DO NOT invent or combine numerical thresholds across different studies.
+// Deliberately NOT implemented (no verifiable, transferable threshold found):
+//   - Cold / frost stress before the reproductive stage
+//   - Heat stress before the reproductive stage
+//   - Any rainfall-only "waterlogging" rule
+// Do not add rules without a source. Do not mix thresholds across studies
+// inside one tier.
 // =============================================================================
 
-import type { RiskRule } from '../types.ts';
+import type { RiskRule, WheatStage } from '../types.ts';
+import {
+  SRC_ICAR_WHEAT_CARDINAL,
+  SRC_WHEAT_FREEZE,
+  SRC_WHEAT_GRAIN_FILL_MAX,
+} from './sources.ts';
+import { buildHeavyRainfallRule } from './shared-rules.ts';
+
+export const WHEAT_STAGES: WheatStage[] = [
+  'early_growth',
+  'crown_root',
+  'vegetative_growth',
+  'reproductive',
+  'grain_development_maturity',
+];
 
 export const WHEAT_RISK_RULES: RiskRule[] = [
-
-  // ── GRAIN DEVELOPMENT / MATURITY ────────────────────────────────────────
-  // IMD KALP explicitly identifies max temp > 30°C during grain filling as
-  // a validated operational threshold for wheat in north India.
+  // ── Terminal heat during grain development ────────────────────────────────
   {
-    id: 'wheat_grain_dev_terminal_heat_moderate',
+    id: 'wheat_grain_fill_heat',
     crop: 'wheat',
-    growth_stage: 'grain_development_maturity',
-    weather_parameter: 'max_temp_c',
-    threshold_operator: 'gt',
-    threshold_value: 30,
-    threshold_unit: '°C',
+    growth_stages: ['grain_development_maturity'],
     risk_name: 'Terminal Heat Stress',
-    risk_severity: 'Moderate',
-    validation_status: 'validated',
-    source: 'IMD KALP Operational Framework',
-    source_url: 'https://mausam.imd.gov.in/imd_latest/contents/agromet/kalp/kalp.pdf',
+    weather_parameter: 'max_temp_c',
+    condition_label: 'Maximum temperature',
+    threshold_unit: '°C',
+    tiers: [
+      {
+        severity: 'Low',
+        threshold_operator: 'gt',
+        threshold_value: 30,
+        source: SRC_ICAR_WHEAT_CARDINAL,
+        severity_basis:
+          'Forecast maximum is above the ~30 °C maximum temperature given for wheat grain filling.',
+      },
+      {
+        severity: 'High',
+        threshold_operator: 'gt',
+        threshold_value: 35,
+        source: SRC_WHEAT_GRAIN_FILL_MAX,
+        severity_basis:
+          'Forecast maximum is above ~35 °C, the grain-filling temperature at which wheat growth is reported to stop.',
+      },
+    ],
+    caveats: [
+      'The thresholds are physiological limits from the literature, not measured yield-loss points for your variety or sowing date.',
+      'Only the daily maximum is checked; heat duration and night temperature are not.',
+    ],
     precautionary_action:
-      'Provide light irrigation to cool the crop canopy. Consider potassium-based foliar spray (KNO₃ 13:0:45 @ 2%) to improve heat tolerance. Harvest as soon as grain is physiologically mature to avoid further heat damage.',
+      'Hot days during grain filling can shorten the filling period. Ask your local KVK whether a light irrigation or an early-harvest plan suits your field and variety.',
     precautionary_action_hi:
-      'फसल को ठंडा रखने के लिए हल्की सिंचाई करें। गर्मी सहनशीलता बढ़ाने के लिए पोटेशियम आधारित पर्णीय स्प्रे (KNO₃ 13:0:45 @ 2%) का उपयोग करें। दाने पकते ही शीघ्र कटाई करें।',
-    notes:
-      'IMD KALP operational framework identifies max temperature > 30°C during grain filling as a wheat heat-risk condition in north India. Source-attributed validated threshold used for automated classification.',
+      'दाना भरने के समय गर्म दिन दाना भरने की अवधि घटा सकते हैं। अपने खेत और किस्म के लिए हल्की सिंचाई या जल्दी कटाई की योजना उपयुक्त है या नहीं, यह स्थानीय KVK से पूछें।',
   },
 
-  // Research observation for temperatures exceeding 35°C — referenced in ICAR wheat UP studies
+  // ── Heat around flowering ─────────────────────────────────────────────────
   {
-    id: 'wheat_grain_dev_terminal_heat_high',
+    id: 'wheat_reproductive_heat',
     crop: 'wheat',
-    growth_stage: 'grain_development_maturity',
-    weather_parameter: 'max_temp_c',
-    threshold_operator: 'gt',
-    threshold_value: 35,
-    threshold_unit: '°C',
-    risk_name: 'Severe Terminal Heat Stress',
-    risk_severity: 'High',
-    validation_status: 'research_observation',
-    source: 'IMD MAUSAM — Climatic Impacts on Wheat in UP',
-    source_url: 'https://mausamjournal.imd.gov.in/index.php/MAUSAM/article/view/1179',
-    precautionary_action:
-      'Emergency irrigation if possible. Apply antitranspirant foliar spray (kaolin). Prioritise early harvest to salvage yield. Consult local KVK for region-specific guidance.',
-    precautionary_action_hi:
-      'यदि संभव हो तत्काल सिंचाई करें। काओलिन का पर्णीय छिड़काव करें। जल्दी कटाई करें। स्थानीय कृषि विज्ञान केंद्र से परामर्श लें।',
-    notes:
-      'Temperature above 35°C during grain filling is referenced in multiple ICAR research contexts as causing significant yield loss. Research observation — validate threshold with local KVK before treating as operational.',
-  },
-
-  // ── REPRODUCTIVE STAGE (Booting / Flowering) ────────────────────────────
-  {
-    id: 'wheat_reproductive_heat_moderate',
-    crop: 'wheat',
-    growth_stage: 'reproductive',
-    weather_parameter: 'max_temp_c',
-    threshold_operator: 'gt',
-    threshold_value: 28,
-    threshold_unit: '°C',
+    growth_stages: ['reproductive'],
     risk_name: 'Flowering Heat Stress',
-    risk_severity: 'Moderate',
-    validation_status: 'research_observation',
-    source: 'IMD MAUSAM — Climatic Impacts on Wheat in UP',
-    source_url: 'https://mausamjournal.imd.gov.in/index.php/MAUSAM/article/view/1179',
-    precautionary_action:
-      'Apply light irrigation in the evening to reduce canopy temperature. Avoid irrigating during peak afternoon heat. Monitor for grain shrivelling. Consult local KVK for regional guidance.',
-    precautionary_action_hi:
-      'शाम को हल्की सिंचाई करें। दोपहर की चरम गर्मी में सिंचाई से बचें। दाने सिकुड़ने पर ध्यान दें। स्थानीय कृषि विज्ञान केंद्र से परामर्श लें।',
-    notes:
-      'Temperatures > 28°C during flowering can reduce pollen viability in wheat. Research observation context; local adaptation confirmation recommended before operational use.',
-  },
-
-  {
-    id: 'wheat_reproductive_heat_high',
-    crop: 'wheat',
-    growth_stage: 'reproductive',
     weather_parameter: 'max_temp_c',
-    threshold_operator: 'gt',
-    threshold_value: 32,
+    condition_label: 'Maximum temperature',
     threshold_unit: '°C',
-    risk_name: 'High Flowering Heat Stress',
-    risk_severity: 'High',
-    validation_status: 'research_observation',
-    source: 'IMD MAUSAM — Climatic Impacts on Wheat in UP',
-    source_url: 'https://mausamjournal.imd.gov.in/index.php/MAUSAM/article/view/1179',
+    tiers: [
+      {
+        severity: 'Low',
+        threshold_operator: 'gt',
+        threshold_value: 26,
+        source: SRC_ICAR_WHEAT_CARDINAL,
+        severity_basis:
+          'Forecast maximum is above the ~26 °C maximum temperature given for wheat at anthesis.',
+      },
+    ],
+    caveats: [
+      'Only one source-backed level exists for this stage, so higher severities are not assigned.',
+      'The stage selected (booting to flowering) is broader than anthesis alone.',
+      'Cardinal temperature from a review table, not a measured damage threshold.',
+    ],
     precautionary_action:
-      'Provide emergency irrigation. Apply potassium foliar spray (KCl @ 2%). Contact local KVK immediately. Significant yield loss is likely — document for insurance purposes.',
+      'Flowering is sensitive to heat. Ask your local KVK about irrigation timing for the coming days and watch the crop for poor grain set.',
     precautionary_action_hi:
-      'तत्काल सिंचाई करें। पोटाश का पर्णीय छिड़काव करें (KCl @ 2%)। स्थानीय KVK से तुरंत संपर्क करें। गंभीर उपज हानि की संभावना है।',
-    notes:
-      'Research observation requiring local validation. Temperature context and measurement method vary across wheat studies.',
+      'फूल आने की अवस्था गर्मी के प्रति संवेदनशील होती है। आने वाले दिनों में सिंचाई के समय के बारे में स्थानीय KVK से पूछें और दाना कम बनने के लक्षणों पर नज़र रखें।',
   },
 
-  // ── EARLY GROWTH (Emergence / Seedling) ─────────────────────────────────
+  // ── Freezing temperatures around boot–flowering ───────────────────────────
   {
-    id: 'wheat_early_growth_frost',
+    id: 'wheat_reproductive_freeze',
     crop: 'wheat',
-    growth_stage: 'early_growth',
+    growth_stages: ['reproductive'],
+    risk_name: 'Frost / Freeze Risk at Booting–Flowering',
     weather_parameter: 'min_temp_c',
-    threshold_operator: 'lt',
-    threshold_value: 2,
+    condition_label: 'Minimum temperature',
     threshold_unit: '°C',
-    risk_name: 'Frost Risk',
-    risk_severity: 'Low',
-    validation_status: 'pending_validation',
-    source: 'General agricultural guidance for wheat in north India',
+    tiers: [
+      {
+        severity: 'Moderate',
+        threshold_operator: 'lte',
+        threshold_value: 0,
+        source: SRC_WHEAT_FREEZE,
+        severity_basis:
+          'Forecast minimum is at or below 0 °C, the injurious temperature listed for flowering (the most sensitive stage covered). Capped at Moderate because a daily minimum cannot show the ≥2 h duration the source requires.',
+      },
+      {
+        severity: 'High',
+        threshold_operator: 'lte',
+        threshold_value: -2,
+        source: SRC_WHEAT_FREEZE,
+        severity_basis:
+          'Forecast minimum is at or below −2 °C, the injurious temperature listed even for the boot stage.',
+      },
+    ],
+    caveats: [
+      'Injury needs the temperature to stay below the threshold for about 2 hours; the daily minimum cannot show duration.',
+      'Source is US winter-wheat guidance; Indian spring/semi-winter varieties may respond differently.',
+      'Forecast air temperature can be higher than temperature at crop level on clear, calm nights.',
+    ],
     precautionary_action:
-      'Light irrigation before anticipated frost to raise soil temperature. Monitor seedlings for frost damage. Consult KVK if frost persists for multiple consecutive days.',
+      'Freezing temperatures at booting–flowering can damage the ear. Ask your local KVK about protective measures, and inspect the crop after the cold night.',
     precautionary_action_hi:
-      'पाले से पहले हल्की सिंचाई करें। अंकुरों में पाले की क्षति की निगरानी करें। लगातार कई दिन पाला पड़े तो KVK से संपर्क करें।',
-    notes:
-      'Pending validation against ICAR/KVK Saharanpur-specific frost thresholds. Used as qualitative warning only until local data is confirmed.',
+      'गभोट से फूल आने की अवस्था में पाला बाली को नुकसान पहुंचा सकता है। बचाव के उपायों के बारे में स्थानीय KVK से पूछें और ठंडी रात के बाद फसल का निरीक्षण करें।',
   },
 
-  // ── CROWN ROOT INITIATION (CRI) ──────────────────────────────────────────
-  {
-    id: 'wheat_crown_root_cold_stress',
-    crop: 'wheat',
-    growth_stage: 'crown_root',
-    weather_parameter: 'min_temp_c',
-    threshold_operator: 'lt',
-    threshold_value: 5,
-    threshold_unit: '°C',
-    risk_name: 'Cold Stress at CRI Stage',
-    risk_severity: 'Low',
-    validation_status: 'pending_validation',
-    source: 'General agricultural guidance for wheat in north India',
-    precautionary_action:
-      'Apply the first CRI irrigation to moderate soil temperature. Avoid nitrogen application during cold-stress periods.',
-    precautionary_action_hi:
-      'पहली CRI सिंचाई करें। ठंड के दौरान नाइट्रोजन उर्वरक देने से बचें।',
-    notes:
-      'Threshold pending validation. Qualitative warning only — cold during CRI stage can impair crown root development.',
-  },
+  // ── Heavy rainfall (all stages) ───────────────────────────────────────────
+  buildHeavyRainfallRule('wheat', WHEAT_STAGES),
+];
 
+/** Risks that are intentionally not evaluated, with the reason shown to users. */
+export const WHEAT_UNSUPPORTED_RISKS: {
+  risk_name: string;
+  stages: WheatStage[];
+  explanation: string;
+}[] = [
   {
-    id: 'wheat_crown_root_excess_rain',
-    crop: 'wheat',
-    growth_stage: 'crown_root',
-    weather_parameter: 'precipitation_mm',
-    threshold_operator: 'gt',
-    threshold_value: 30,
-    threshold_unit: 'mm/day',
-    risk_name: 'Excess Rainfall / Waterlogging Risk at CRI',
-    risk_severity: 'Moderate',
-    validation_status: 'pending_validation',
-    source: 'General agricultural guidance for wheat drainage management',
-    precautionary_action:
-      'Ensure field drainage channels are clear. Avoid irrigating until soil moisture decreases. Excess water at CRI stage can impair crown root development and increase disease susceptibility.',
-    precautionary_action_hi:
-      'खेत की नाली साफ रखें। मिट्टी में नमी कम होने तक सिंचाई न करें। CRI अवस्था में अत्यधिक पानी से जड़ विकास प्रभावित हो सकता है।',
-    notes:
-      'Rainfall > 30mm/day is a qualitative indicator of potential waterlogging. Actual waterlogging depends on soil type and drainage infrastructure. Pending validation.',
+    risk_name: 'Cold stress',
+    stages: ['early_growth', 'crown_root', 'vegetative_growth', 'grain_development_maturity'],
+    explanation:
+      'No verified, India-applicable low-temperature threshold was found for this stage, so cold stress is not assessed.',
   },
-
-  // ── VEGETATIVE GROWTH (Tillering) ────────────────────────────────────────
   {
-    id: 'wheat_vegetative_excess_rain',
-    crop: 'wheat',
-    growth_stage: 'vegetative_growth',
-    weather_parameter: 'precipitation_mm',
-    threshold_operator: 'gt',
-    threshold_value: 40,
-    threshold_unit: 'mm/day',
-    risk_name: 'Excess Rainfall During Tillering',
-    risk_severity: 'Low',
-    validation_status: 'pending_validation',
-    source: 'General agricultural guidance for wheat in Uttar Pradesh',
-    precautionary_action:
-      'Clear field drainage channels to prevent waterlogging. Delay any planned irrigation. Monitor for yellowing leaves or disease signs.',
-    precautionary_action_hi:
-      'जल निकासी नालियों को साफ करें। नियोजित सिंचाई में देरी करें। पीली पत्तियों या बीमारी के संकेतों की निगरानी करें।',
-    notes:
-      'Qualitative warning based on excess rainfall potential. Not a confirmed crop-damage prediction. Pending local validation.',
+    risk_name: 'Heat stress',
+    stages: ['early_growth', 'crown_root', 'vegetative_growth'],
+    explanation:
+      'No verified heat threshold was found for this stage, so heat stress is not assessed.',
   },
 ];

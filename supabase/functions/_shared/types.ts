@@ -37,17 +37,6 @@ export type ThresholdOperator = 'gt' | 'lt' | 'gte' | 'lte';
 
 export type RiskSeverity = 'Low' | 'Moderate' | 'High';
 
-/**
- * Controls how a risk rule is surfaced to the user:
- * - 'validated'            → automated severity classification (Low/Moderate/High) is allowed
- * - 'research_observation' → qualitative "Potential Risk" warning only; no automated severity
- * - 'pending_validation'   → qualitative "Potential Risk" warning only; needs local KVK confirmation
- */
-export type ValidationStatus =
-  | 'validated'
-  | 'research_observation'
-  | 'pending_validation';
-
 // ── Weather types ─────────────────────────────────────────────────────────────
 
 /** A single day's processed forecast from Open-Meteo */
@@ -73,57 +62,97 @@ export interface WeatherSummary {
 
 // ── Risk rule types ───────────────────────────────────────────────────────────
 
+/** Kind of evidence behind a threshold. Shown to users so they can judge weight. */
+export type EvidenceType =
+  | 'official_classification'  // e.g. IMD rainfall-intensity categories
+  | 'extension_guidance'       // university / government extension publications
+  | 'research_literature';     // peer-reviewed or institute publications
+
+/** A verifiable source for one threshold. */
+export interface SourceRef {
+  name: string;
+  url?: string;
+  /** What exactly the source says, in one sentence (no invented numbers). */
+  citation: string;
+  evidence_type: EvidenceType;
+  /** Honest note on how well the source transfers to the farmer's situation. */
+  applicability_note?: string;
+}
+
 /**
- * A single crop-specific weather risk rule.
- * Each rule must have a verifiable agricultural source.
+ * One severity level of a rule. Every tier carries its OWN source because
+ * different thresholds of the same risk can come from different publications.
+ * Tiers are listed in ascending severity order.
  */
+export interface RiskTier {
+  severity: RiskSeverity;
+  threshold_operator: ThresholdOperator;
+  threshold_value: number;
+  source: SourceRef;
+  /**
+   * Why this threshold maps to this severity label. The threshold comes from
+   * the source; the Low/Moderate/High label is the engine's documented mapping.
+   */
+  severity_basis: string;
+}
+
+/** A crop-specific weather risk rule. Rules without a verifiable source must not exist. */
 export interface RiskRule {
   id: string;
   crop: CropType;
-  growth_stage: GrowthStage;
-  weather_parameter: WeatherParameter;
-  threshold_operator: ThresholdOperator;
-  threshold_value: number;
-  threshold_unit: string;
-  duration_hours?: number;
+  /** Growth stages (as selected manually by the farmer) this rule applies to. */
+  growth_stages: GrowthStage[];
   risk_name: string;
-  risk_severity: RiskSeverity;
-  validation_status: ValidationStatus;
-  source: string;
-  source_url?: string;
+  weather_parameter: WeatherParameter;
+  /** Human-readable name of the weather condition, e.g. "Maximum temperature". */
+  condition_label: string;
+  threshold_unit: string;
+  tiers: RiskTier[];
+  /** Limits of the rule that must be shown with the result. */
+  caveats: string[];
   precautionary_action: string;
   precautionary_action_hi?: string;
-  notes?: string;
+}
+
+/** A risk the engine cannot evaluate. Reported instead of silently skipped. */
+export interface NotAssessedRisk {
+  risk_name: string;
+  rule_id?: string;
+  reason: 'insufficient_data' | 'no_supported_data';
+  weather_parameter?: WeatherParameter;
+  explanation: string;
 }
 
 // ── Risk detection output ─────────────────────────────────────────────────────
 
-/**
- * A risk detected by the deterministic risk engine.
- * severity is 'Potential Risk' for research_observation / pending_validation rules.
- */
+/** A risk detected by the deterministic risk engine. */
 export interface DetectedRisk {
   rule_id: string;
   risk_name: string;
-  /**
-   * Severity label:
-   * - For validated rules: 'Low' | 'Moderate' | 'High'
-   * - For unvalidated rules: 'Potential Risk'
-   * - When data is insufficient: 'Insufficient Data'
-   */
-  severity: RiskSeverity | 'Potential Risk' | 'Insufficient Data';
-  validation_status: ValidationStatus;
+  severity: RiskSeverity;
   weather_parameter: WeatherParameter;
-  observed_value: number;
-  threshold_value: number;
+  /** e.g. "Maximum temperature above 30 °C" */
+  weather_condition: string;
   threshold_operator: ThresholdOperator;
+  threshold_value: number;
   threshold_unit: string;
-  trigger_date: string;                // The forecast date that triggered this rule
-  source: string;
-  source_url?: string;
+  /** Most extreme forecast value among the triggering days, and its date. */
+  peak_observed_value: number;
+  peak_observed_date: string;
+  /** Days on which the reported severity's threshold is crossed. */
+  forecast_period: {
+    start_date: string;
+    end_date: string;
+    triggered_dates: string[];
+  };
+  /** Plain-language explanation of why this risk was flagged. */
+  reason: string;
+  data_coverage: { days_with_data: number; days_in_forecast: number };
+  source: SourceRef;
+  severity_basis: string;
+  caveats: string[];
   precautionary_action: string;
   precautionary_action_hi?: string;
-  notes?: string;
 }
 
 // ── Farmer input ──────────────────────────────────────────────────────────────
@@ -152,6 +181,7 @@ export interface AdvisoryResponse {
   farmer_input: FarmerInput;
   weather_summary: WeatherSummary;
   detected_risks: DetectedRisk[];
+  not_assessed_risks: NotAssessedRisk[];
   ai_advisory?: string;               // Gemini-generated text; undefined if Gemini unavailable
   ai_fallback: boolean;               // true when Gemini was unavailable
   advisory_id?: string;               // Supabase row ID if advisory was saved
