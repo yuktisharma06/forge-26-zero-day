@@ -50,6 +50,16 @@ Must-have features:
 - Collect the sowing date, and manually selected current growth stage of the crop.
 - Allow farmers to choose their preferred language (Hindi or English).
 - Validate inputs and display clear messages if any required information is missing or incorrect.
+- **Visual Farmer Interaction**
+  - Provide image-based crop selection for the supported crops (Sugarcane and Wheat).
+  - Display representative pictures for each crop's growth stages and allow farmers to select their current stage visually.
+  - Use guided, selectable inputs wherever possible to reduce typing.
+  - Keep the interface simple, mobile-friendly and accessible to farmers with limited digital literacy.
+
+- **Voice Assistance**
+  - Provide text-to-speech playback for important instructions and generated crop advisories in Hindi and English.
+  - Include a clearly visible speaker button near advisory content.
+  - Treat speech-to-text voice input as an optional enhancement, not a core MVP dependency.
 
 2. Weather Forecast Integration
 - Fetch actual weather forecast data for the farmer's selected location using the Open-Meteo API.
@@ -105,9 +115,15 @@ The initial development priority will be to complete all must-have features. Nic
 **1. User Inputs**
 - Location: Initially, Saharanpur, Uttar Pradesh. Allow village-level selection or GPS coordinates where available.
 - Crop: Sugarcane or wheat.
-- Sowing Date: Used to estimate the crop's growth stage.
-- Growth Stage: Allow manual selection if the sowing date is unavailable.
 - Preferred Language: Hindi or English.
+- **Visual Input and Selection Requirements**
+  - Crop selection must be available through image-based cards for Sugarcane and Wheat.
+  - Growth-stage selection must display representative images with simple labels in Hindi and English.
+  - Farmers must be able to select their current growth stage manually.
+  - Sowing date must be collected separately from growth stage; both are required inputs.
+  - Use selectable options wherever possible to minimise manual typing.
+  - Location entry should be simple and require minimal typing wherever feasible.
+  - The application must not automatically determine the growth stage from pictures or sowing date.
 
 **2. Weather Data**
 - API: Open-Meteo Weather API.
@@ -308,6 +324,31 @@ For each detected risk, display:
 - Clearly show when weather information was last updated.
 - Ensure that the interface works properly in both Hindi and English.
 
+### Visual-First and Voice-Assisted User Experience
+
+The application must be designed primarily for visual understanding and ease of use by farmers, including users who may have limited digital literacy.
+
+**Visual Interaction**
+- Use image-based cards and illustrations wherever practical instead of text-heavy selection menus.
+- Allow farmers to select crops using pictures.
+- Display crop growth stages with representative images so farmers can identify their current stage visually.
+- Use large buttons, clear icons, readable text and touch-friendly controls.
+- Minimise typing by using selectable options, dropdowns and guided inputs wherever possible.
+
+**Language and Voice Support**
+- Hindi should be the default interface language, with an option to switch to English.
+- Provide voice playback for important instructions, weather-risk explanations and preventive advisories in the selected language.
+- Display a speaker button near important advisory content.
+- Use simple, conversational language and avoid unnecessary agricultural or technical terminology.
+- Voice input may be implemented as an optional enhancement if time and technical feasibility permit.
+
+**Action-First Dashboard**
+- The dashboard must prioritise what the farmer needs to pay attention to today.
+- Display the most important detected crop risk and recommended preventive actions prominently.
+- Present weather information as supporting evidence for the risk assessment, rather than making weather statistics the main focus.
+- If no significant risk is detected, clearly communicate that no significant risk was identified from the available forecast.
+- Provide clear, practical and easy-to-follow instructions.
+
 **MVP Scope Clarification:**
 The Home Page, Farmer Details Page, Main Dashboard and Risk Advisory Section are mandatory for the initial version. The AI Chat Assistant and Advisory History are optional features and should only be implemented if time permits after all must-have features are working.
 
@@ -409,69 +450,88 @@ The application should never crash or display misleading information because of 
 - Include additional agricultural assistance features based on user needs.
 The application should be designed with a scalable, data-driven architecture. Crop-specific growth stages, weather-risk thresholds and preventive recommendations should be maintained separately from application logic in the database. This will allow new crops and regions to be added by introducing verified agricultural data and rules rather than rewriting the core application. The long-term vision is to expand KisanRakshak across India while supporting regional agricultural differences.
 
-## 10. Acceptance criteria and test examples
+## 10. Acceptance Criteria and Test Examples
 
-### Acceptance criteria and test examples
-
-**Acceptance Criteria**
+### Acceptance Criteria
 
 The application will be considered functional when:
 
-1. A farmer can enter a valid location, select a supported crop and provide a sowing date and manually selected current growth stage.
+1. A farmer can enter a valid location, select a supported crop and provide both a sowing date and a manually selected current growth stage.
 
-2. The application successfully fetches actual weather forecast data for the selected location through Open-Meteo.
+2. Sugarcane and Wheat can be selected through image-based crop cards.
 
-3. The dashboard displays relevant weather information, including temperature, rainfall, humidity and wind speed.
+3. Each supported crop displays its relevant growth stages with representative images and simple labels in Hindi and English, allowing farmers to identify and select their current stage visually.
 
-4. The backend analyses forecast data using predefined, verified crop-specific risk rules.
+4. The application successfully fetches actual weather forecast data for the selected location through Open-Meteo.
 
-5. The application identifies relevant weather risks and displays their severity as Low, Moderate or High.
+5. The dashboard displays relevant weather information, including temperature, rainfall, humidity and wind speed, as supporting information for the risk assessment.
 
-6. When weather data is insufficient or unavailable, the application clearly communicates this instead of generating unsupported risk predictions.
+6. The backend analyses forecast data using predefined, verified crop-specific risk rules based on the selected crop and growth stage.
 
-7. Gemini generates understandable explanations and preventive suggestions based on detected risks and verified agricultural information.
+7. The application identifies relevant weather risks and displays their severity as Low, Moderate or High.
 
-8. AI-generated guidance is available in Hindi and English and does not invent weather data, risk thresholds or unsupported treatments.
+8. When weather data is insufficient or unavailable, the application clearly communicates this instead of generating unsupported risk predictions.
 
-9. The dashboard clearly displays weather forecasts, crop details, detected risks and recommendations in a mobile-friendly interface.
+9. Gemini generates understandable explanations and preventive suggestions based on backend-detected risks and verified agricultural information.
 
-10. API failures, invalid inputs and network errors are handled without crashing the application.
+10. AI-generated guidance is available in Hindi and English and does not invent weather data, risk thresholds or unsupported treatments.
 
-11. API keys and sensitive credentials are not exposed in frontend code or the public GitHub repository.
+11. Hindi is the default interface language, with an option to switch to English. Important instructions and crop advisories can be played through a speaker button in the selected language.
 
-12. The frontend and backend are deployed and the complete application can be demonstrated through a working user journey.
+12. The interface is visual-first, mobile-friendly and designed for ease of use by farmers. It uses large touch-friendly buttons, clear icons, simple language and selectable options to minimise typing.
 
-**Test Examples**
+13. The dashboard follows an action-first approach, displaying priority crop risks and recommended preventive actions prominently before detailed weather statistics.
 
-1. Valid Input:
+14. When no significant risk is detected, the dashboard clearly communicates this instead of displaying misleading warnings.
+
+15. If voice playback or the AI service is unavailable, the application still provides accessible text-based information and displays backend-detected risks wherever available.
+
+16. API failures, invalid inputs and network errors are handled without crashing the application.
+
+17. API keys and sensitive credentials are not exposed in frontend code or the public GitHub repository.
+
+18. The frontend and backend are deployed, and the complete application can be demonstrated through a working user journey.
+
+### Test Examples
+
+1. **Valid Input:**  
 A farmer selects a supported crop, enters a valid location, provides a sowing date and manually selects the current growth stage. The application should fetch weather data and generate a crop-specific advisory.
 
-2. High-Risk Weather:
+2. **Visual Crop Selection:**  
+Verify that Sugarcane and Wheat are displayed as image-based selection cards and that selecting either crop displays only its relevant growth stages.
+
+3. **Growth-Stage Selection:**  
+Verify that farmers can identify and select their current growth stage through representative images and simple labels. The selected stage must be correctly passed to the backend.
+
+4. **High-Risk Weather:**  
 The forecast contains weather conditions that cross a verified crop-specific risk threshold. The backend should detect the risk and the application should display its severity and relevant preventive guidance.
 
-3. No Significant Risk:
+5. **No Significant Risk:**  
 The forecast does not trigger any predefined risk rule. The application should display that no significant risk was detected in the available forecast.
 
-4. Invalid Input:
+6. **Invalid Input:**  
 The farmer submits the form without selecting a crop or entering a required location. The application should display an appropriate validation message.
 
-5. Weather API Failure:
+7. **Weather API Failure:**  
 The weather service is unavailable. The application should display an error message and provide a retry option without showing fabricated weather information.
 
-6. AI API Failure:
+8. **AI API Failure:**  
 Gemini does not respond. The application should still display the backend-detected risks and an appropriate fallback message.
 
-7. Insufficient Data:
+9. **Insufficient Data:**  
 Required weather parameters or verified agricultural thresholds are unavailable. The application should communicate that a reliable risk assessment cannot be made.
 
-8. Language Selection:
-The farmer switches between Hindi and English. The interface and generated advisory should use the selected language wherever supported.
+10. **Language and Voice Assistance:**  
+Verify that switching between Hindi and English updates the interface and advisory language wherever supported. The speaker button should play the correct advisory in the selected language. If playback is unavailable, readable text must remain accessible.
 
-9. Crop-Specific Testing:
-Test the application separately with sugarcane and wheat inputs in Saharanpur. Verify that each crop uses its own relevant growth-stage information, weather-risk rules and preventive recommendations. The application should not apply one crop's risk thresholds to the other.
+11. **Action-First Dashboard:**  
+Verify that priority crop risks and recommended actions appear before detailed weather statistics. When no significant risk is detected, the dashboard should communicate this clearly.
 
-10. Growth-Stage Input Validation:
-Test sugarcane and wheat separately using a sowing date and manually selected growth stage. Verify that the backend applies rules for the selected crop and stage, does not silently override the farmer's selection, and displays a confirmation message when the entered details appear inconsistent.
+12. **Crop-Specific Testing:**  
+Test the application separately with Sugarcane and Wheat inputs in Saharanpur. Verify that each crop uses its own relevant growth-stage information, weather-risk rules and preventive recommendations. The application should not apply one crop's risk thresholds to the other.
+
+13. **Growth-Stage Input Validation:**  
+Test Sugarcane and Wheat separately using a sowing date and manually selected growth stage. Verify that the backend applies rules for the selected crop and stage, does not silently override the farmer's selection, and displays a confirmation message when the entered details appear inconsistent.
 
 ## Implementation deliverables
 
