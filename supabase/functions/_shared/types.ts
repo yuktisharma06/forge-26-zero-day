@@ -174,6 +174,42 @@ export interface FarmerInput {
   language: Language;
 }
 
+// ── AI advisory (Phase D) ─────────────────────────────────────────────────────
+
+/** Plain-language explanation of ONE risk the deterministic engine detected. */
+export interface AiRiskExplanation {
+  /** Must match a rule_id in detected_risks. Severity is never restated or changed here. */
+  rule_id: string;
+  why_it_matters: string;
+  crop_impact: string;
+  what_to_do: string[];
+}
+
+export type AiFallbackReason =
+  | 'not_configured'      // no GEMINI_API_KEY
+  | 'timeout'
+  | 'api_error'           // HTTP error / network error
+  | 'blocked'             // Gemini safety block
+  | 'invalid_output'      // not valid JSON / wrong shape / truncated
+  | 'guardrail_rejected'; // output broke a safety rule (invented number, dosage, chemical…)
+
+export interface AiAdvisory {
+  /**
+   * 'generated'  → Gemini wrote the explanations and they passed every guardrail
+   * 'fallback'   → Gemini unavailable or rejected; explanations built from engine text
+   * 'not_needed' → nothing to explain (no risks flagged, or engine could not assess)
+   */
+  status: 'generated' | 'fallback' | 'not_needed';
+  language: Language;
+  generated_by: 'gemini' | 'deterministic_fallback' | 'none';
+  model?: string;
+  fallback_reason?: AiFallbackReason;
+  summary: string;
+  risks: AiRiskExplanation[];
+  /** Fixed text, never written by the model. */
+  disclaimer: string;
+}
+
 // ── Advisory response ─────────────────────────────────────────────────────────
 
 /** Full response returned by the generate-advisory Edge Function */
@@ -182,8 +218,8 @@ export interface AdvisoryResponse {
   weather_summary: WeatherSummary;
   detected_risks: DetectedRisk[];
   not_assessed_risks: NotAssessedRisk[];
-  ai_advisory?: string;               // Gemini-generated text; undefined if Gemini unavailable
-  ai_fallback: boolean;               // true when Gemini was unavailable
+  ai_advisory: AiAdvisory | null;     // Phase D output
+  ai_fallback: boolean;               // true when Gemini was unavailable or rejected
   advisory_id?: string;               // Supabase row ID if advisory was saved
   consistency_warning?: string;       // Non-fatal: shown when sowing_date and stage seem inconsistent
   generated_at: string;               // ISO timestamp
