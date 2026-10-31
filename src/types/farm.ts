@@ -71,7 +71,10 @@ export interface WeatherRisk {
   sources: RiskSource[];
 }
 
+export type AssessmentStatus = 'completed' | 'no_significant_risk' | 'insufficient_data';
+
 export interface AdvisoryResponse {
+  assessmentStatus: AssessmentStatus;
   forecast: WeatherForecast;
   risks: WeatherRisk[];
   insufficientData: Bilingual | null;

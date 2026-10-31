@@ -1,52 +1,39 @@
-import { buildMockForecast } from '../data/mockWeather';
-import { MOCK_STAGE_ADVISORIES } from '../data/mockRisks';
 import type { AdvisoryResponse, FarmerInput } from '../types/farm';
 import {
-  ADVISORY_FUNCTION_PATH,
-  buildAdvisoryRequest,
-  parseContractResponse,
+  AdvisoryRequestError,
+  CROP_ADVISORY_PATH,
+  buildCropAdvisoryRequest,
+  parseCropAdvisoryResponse,
   toAdvisoryResponse,
 } from './advisoryContract';
+import { fetchMockAdvisory } from './mockAdvisoryService';
 
-const MOCK_LATENCY_MS = 800;
 const USE_MOCK_ADVISORY = import.meta.env.VITE_USE_MOCK_ADVISORY !== 'false';
 
-async function fetchMockAdvisory(input: FarmerInput): Promise<AdvisoryResponse> {
-  await new Promise((resolve) => setTimeout(resolve, MOCK_LATENCY_MS));
-
-  const stageAdvisory = MOCK_STAGE_ADVISORIES[input.cropId][input.stageId];
-  if (!stageAdvisory) {
-    throw new Error(`No advisory available for ${input.cropId} at stage ${input.stageId}`);
-  }
-
-  return {
-    forecast: buildMockForecast(),
-    risks: stageAdvisory.risks,
-    insufficientData: stageAdvisory.insufficientData,
-    aiSummary: stageAdvisory.aiSummary,
-    actions: [],
-  };
-}
-
 async function fetchLiveAdvisory(input: FarmerInput): Promise<AdvisoryResponse> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const baseUrl = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !anonKey) {
-    throw new Error('Advisory service is not configured');
+  if (!baseUrl || !anonKey) {
+    throw new AdvisoryRequestError('INTERNAL_SERVER_ERROR', 'Advisory service is not configured.');
   }
 
-  const response = await fetch(`${supabaseUrl}${ADVISORY_FUNCTION_PATH}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-    },
-    body: JSON.stringify(buildAdvisoryRequest(input)),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}${CROP_ADVISORY_PATH}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+      },
+      body: JSON.stringify(buildCropAdvisoryRequest(input)),
+    });
+  } catch {
+    throw new AdvisoryRequestError('NETWORK_ERROR', 'Could not reach the advisory service.');
+  }
 
   const raw: unknown = await response.json().catch(() => null);
-  return toAdvisoryResponse(parseContractResponse(raw));
+  return toAdvisoryResponse(parseCropAdvisoryResponse(raw));
 }
 
 export function fetchAdvisory(input: FarmerInput): Promise<AdvisoryResponse> {

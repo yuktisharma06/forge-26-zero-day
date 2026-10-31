@@ -1,68 +1,29 @@
-import type { AdvisoryResponse, Bilingual, FarmerInput, Language, RiskLevel } from '../types/farm';
+import type { AdvisoryResponse, Bilingual, FarmerInput } from '../types/farm';
+import type { CropAdvisoryErrorCode, CropAdvisoryRequest, CropAdvisorySuccess } from '../types/cropAdvisory';
 
-export const ADVISORY_FUNCTION_PATH = '/functions/v1/crop-advisory';
+export const CROP_ADVISORY_PATH = '/functions/v1/crop-advisory';
 
-export interface AdvisoryRequestBody {
-  location: string;
-  crop: string;
-  sowingDate: string;
-  growthStage: string;
-  language: Language;
-}
+export type AdvisoryErrorCode = CropAdvisoryErrorCode | 'NETWORK_ERROR';
 
-interface ContractSource {
-  title: string;
-  url: string;
-}
-
-interface ContractRisk {
-  name: string;
-  severity: RiskLevel;
-  weatherCondition: string;
-  forecastPeriod: string;
-  reason: string;
-  source?: ContractSource | null;
-}
-
-interface ContractDay {
-  date: string;
-  temperatureMaxC: number;
-  temperatureMinC: number;
-  precipitationMm: number;
-  humidityPercent: number;
-  windSpeedKmh: number;
-}
-
-export interface ContractSuccess {
-  success: true;
-  assessmentStatus: 'completed' | 'no_significant_risk' | 'insufficient_data';
-  crop: string;
-  growthStage: string;
-  location: { name: string; latitude: number; longitude: number };
-  weather: { source: string; timezone: string; fetchedAt: string; dailyForecast: ContractDay[] };
-  risks: ContractRisk[];
-  advisory: { summary: string; actions: string[]; language: Language };
-  aiStatus: string;
-}
-
-export interface ContractFailure {
-  success: false;
-  error: { code: string; message: string };
-}
-
-export type ContractResponse = ContractSuccess | ContractFailure;
+const KNOWN_ERROR_CODES: readonly string[] = [
+  'INVALID_INPUT',
+  'LOCATION_NOT_FOUND',
+  'WEATHER_API_ERROR',
+  'AI_SERVICE_ERROR',
+  'INTERNAL_SERVER_ERROR',
+];
 
 export class AdvisoryRequestError extends Error {
-  readonly code: string;
+  readonly code: AdvisoryErrorCode;
 
-  constructor(code: string, message: string) {
+  constructor(code: AdvisoryErrorCode, message: string) {
     super(message);
     this.name = 'AdvisoryRequestError';
     this.code = code;
   }
 }
 
-export function buildAdvisoryRequest(input: FarmerInput): AdvisoryRequestBody {
+export function buildCropAdvisoryRequest(input: FarmerInput): CropAdvisoryRequest {
   return {
     location: input.location.name.en,
     crop: input.cropId,
@@ -72,31 +33,48 @@ export function buildAdvisoryRequest(input: FarmerInput): AdvisoryRequestBody {
   };
 }
 
-export function parseContractResponse(raw: unknown): ContractSuccess {
+export function parseCropAdvisoryResponse(raw: unknown): CropAdvisorySuccess {
   if (typeof raw !== 'object' || raw === null || !('success' in raw)) {
     throw new AdvisoryRequestError('INTERNAL_SERVER_ERROR', 'Unexpected response from the advisory service.');
   }
 
-  const response = raw as ContractResponse;
+  const response = raw as {
+    success?: unknown;
+    assessmentStatus?: unknown;
+    risks?: unknown;
+    weather?: { dailyForecast?: unknown };
+    advisory?: unknown;
+    error?: { code?: string; message?: string };
+  };
+
   if (response.success === false) {
-    throw new AdvisoryRequestError(response.error?.code ?? 'INTERNAL_SERVER_ERROR', response.error?.message ?? '');
+    const code = response.error?.code ?? '';
+    const known = KNOWN_ERROR_CODES.includes(code) ? (code as AdvisoryErrorCode) : 'INTERNAL_SERVER_ERROR';
+    throw new AdvisoryRequestError(known, response.error?.message ?? 'Advisory request failed.');
   }
 
-  if (!Array.isArray(response.risks) || !Array.isArray(response.weather?.dailyForecast) || !response.advisory) {
+  if (
+    response.success !== true ||
+    !Array.isArray(response.risks) ||
+    !Array.isArray(response.weather?.dailyForecast) ||
+    !response.advisory ||
+    typeof response.assessmentStatus !== 'string'
+  ) {
     throw new AdvisoryRequestError('INTERNAL_SERVER_ERROR', 'Advisory response is missing required fields.');
   }
 
-  return response;
+  return response as CropAdvisorySuccess;
 }
 
 function sameText(text: string): Bilingual {
   return { hi: text, en: text };
 }
 
-export function toAdvisoryResponse(data: ContractSuccess): AdvisoryResponse {
+export function toAdvisoryResponse(data: CropAdvisorySuccess): AdvisoryResponse {
   const summary = data.advisory.summary ? sameText(data.advisory.summary) : null;
 
   return {
+    assessmentStatus: data.assessmentStatus,
     forecast: {
       fetchedAt: data.weather.fetchedAt,
       daily: data.weather.dailyForecast.map((day) => ({

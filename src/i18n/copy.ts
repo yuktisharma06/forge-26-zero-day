@@ -110,6 +110,14 @@ export const copy = {
   },
   loadingTitle: { hi: 'मौसम और सलाह लोड हो रही है', en: 'Loading weather and advice' },
   loadingText: { hi: 'कृपया थोड़ी देर प्रतीक्षा करें।', en: 'Please wait a moment.' },
+  locationNotFoundText: {
+    hi: 'यह गाँव या शहर नहीं मिल सका। कृपया स्थान का नाम दोबारा जाँचें।',
+    en: 'We could not find this location. Please check the village or town name.',
+  },
+  weatherErrorText: {
+    hi: 'अभी मौसम की जानकारी नहीं मिल पा रही है। थोड़ी देर बाद फिर से कोशिश करें।',
+    en: 'Weather information is not available right now. Please try again later.',
+  },
   errorTitle: { hi: 'जानकारी नहीं मिल सकी', en: 'Could not get the information' },
   errorText: {
     hi: 'अभी मौसम की जानकारी नहीं मिल पा रही है। कृपया फिर से कोशिश करें।',

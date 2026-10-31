@@ -3,27 +3,30 @@ import Card from '../ui/Card';
 import { InsufficientDataBadge } from '../ui/RiskBadge';
 import { copy } from '../../i18n/copy';
 import { useLanguage } from '../../i18n/LanguageContext';
-import type { Bilingual, WeatherRisk } from '../../types/farm';
+import type { AssessmentStatus, Bilingual, WeatherRisk } from '../../types/farm';
 import RiskAdvisoryCard from './RiskAdvisoryCard';
 
 interface RiskSectionProps {
+  assessmentStatus: AssessmentStatus;
   risks: WeatherRisk[];
   insufficientData: Bilingual | null;
 }
 
-export default function RiskSection({ risks, insufficientData }: RiskSectionProps) {
+export default function RiskSection({ assessmentStatus, risks, insufficientData }: RiskSectionProps) {
   const { t } = useLanguage();
   const [priorityRisk, ...otherRisks] = risks;
 
   if (!priorityRisk) {
-    return insufficientData ? (
+    return assessmentStatus === 'insufficient_data' ? (
       <Card as="section" className="flex flex-col gap-3 border-neutral-300">
         <InsufficientDataBadge />
         <h2 className="text-xl font-bold text-neutral-900">{t(copy.insufficientTitle)}</h2>
-        <p className="flex gap-2 text-base text-neutral-700">
-          <CircleHelp className="mt-1 h-5 w-5 shrink-0 text-neutral-500" aria-hidden="true" />
-          {t(insufficientData)}
-        </p>
+        {insufficientData && (
+          <p className="flex gap-2 text-base text-neutral-700">
+            <CircleHelp className="mt-1 h-5 w-5 shrink-0 text-neutral-500" aria-hidden="true" />
+            {t(insufficientData)}
+          </p>
+        )}
       </Card>
     ) : (
       <Card as="section" className="flex flex-col gap-3 border-success-600/30 bg-success-50">

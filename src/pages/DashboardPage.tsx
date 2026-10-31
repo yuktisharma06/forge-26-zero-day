@@ -12,7 +12,14 @@ import { useFarmer } from '../context/FarmerContext';
 import { useAdvisory } from '../hooks/useAdvisory';
 import { copy } from '../i18n/copy';
 import { useLanguage } from '../i18n/LanguageContext';
+import type { AdvisoryErrorCode } from '../services/advisoryContract';
 import { isForecastStale } from '../utils/format';
+
+function errorCopyFor(code: AdvisoryErrorCode) {
+  if (code === 'LOCATION_NOT_FOUND') return copy.locationNotFoundText;
+  if (code === 'WEATHER_API_ERROR') return copy.weatherErrorText;
+  return copy.errorText;
+}
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -45,7 +52,7 @@ export default function DashboardPage() {
         <StateMessage
           tone="error"
           title={copy.errorTitle}
-          text={copy.errorText}
+          text={errorCopyFor(state.code)}
           action={
             <Button onClick={refresh}>{t(copy.retry)}</Button>
           }
@@ -65,7 +72,11 @@ export default function DashboardPage() {
             {t(copy.demoNotice)}
           </p>
 
-          <RiskSection risks={state.data.risks} insufficientData={state.data.insufficientData} />
+          <RiskSection
+            assessmentStatus={state.data.assessmentStatus}
+            risks={state.data.risks}
+            insufficientData={state.data.insufficientData}
+          />
 
           <AiExplanationCard summary={state.data.aiSummary} actions={state.data.actions} onRetry={refresh} />
 

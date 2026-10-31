@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AdvisoryRequestError, type AdvisoryErrorCode } from '../services/advisoryContract';
 import { fetchAdvisory } from '../services/advisoryService';
 import type { AdvisoryResponse, FarmerInput } from '../types/farm';
 
 export type AdvisoryState =
   | { status: 'loading' }
-  | { status: 'error' }
+  | { status: 'error'; code: AdvisoryErrorCode }
   | { status: 'success'; data: AdvisoryResponse };
 
 export function useAdvisory(input: FarmerInput | null) {
@@ -23,8 +24,10 @@ export function useAdvisory(input: FarmerInput | null) {
       .then((data) => {
         if (active) setState({ status: 'success', data });
       })
-      .catch(() => {
-        if (active) setState({ status: 'error' });
+      .catch((error: unknown) => {
+        if (!active) return;
+        const code = error instanceof AdvisoryRequestError ? error.code : 'NETWORK_ERROR';
+        setState({ status: 'error', code });
       });
 
     return () => {
