@@ -138,7 +138,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           growth_stage: farmerInput.growth_stage,
           language: farmerInput.language,
         },
-        weather_summary: weatherSummary,
+        weather_summary: weatherResult.is_fallback ? null : weatherSummary,
         // Tells the frontend and team exactly where the data came from.
         weather_source: weatherResult.is_fallback ? 'fallback' : 'live',
         // Honest note shown whenever sample data is served instead of a live forecast.
