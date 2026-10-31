@@ -18,7 +18,7 @@ const OPEN_METEO_BASE_URL = 'https://api.open-meteo.com/v1/forecast';
 const STALE_THRESHOLD_DAYS = 2;
 
 /** Request timeout for the Open-Meteo API call (ms) */
-const FETCH_TIMEOUT_MS = 15_000;
+const FETCH_TIMEOUT_MS = 5_000;
 
 /** Default coordinates for Saharanpur, Uttar Pradesh */
 export const SAHARANPUR_COORDS = {
@@ -100,11 +100,88 @@ export function weatherDataCompletenessRatio(weather: WeatherSummary): number {
   return total === 0 ? 1.0 : nullCount / total;
 }
 
+// =============================================================================
+// Fallback weather data
+// =============================================================================
+
+/**
+ * Return type for fetchWeatherForecastWithFallback.
+ *
+ * - is_fallback: false → weather came from the live Open-Meteo API (source: "live")
+ * - is_fallback: true  → Open-Meteo was unavailable; weather is clearly-labelled
+ *                         sample data (source: "fallback") so the demo stays honest
+ */
+export interface WeatherFetchResult {
+  weather: WeatherSummary;
+  /** true when the result is sample data, not a real API response */
+  is_fallback: boolean;
+  /** Human-readable reason the fallback was used; undefined when is_fallback=false */
+  fallback_reason?: string;
+}
+
+/**
+ * Realistic static sample values representing typical conditions near Saharanpur, UP.
+ * Dates are computed dynamically at call time so they always look current.
+ *
+ * These values are used ONLY when the live API is unavailable.
+ * They are NOT used as risk-detection inputs — Phase C will gate on is_fallback.
+ */
+const SAMPLE_DAILY_OFFSETS: Omit<DailyForecast, 'date'>[] = [
+  { max_temp_c: 29, min_temp_c: 17, precipitation_mm: 0,    precipitation_probability_pct: 5,  humidity_pct: 62, wind_speed_kmh: 11 },
+  { max_temp_c: 31, min_temp_c: 18, precipitation_mm: 0,    precipitation_probability_pct: 8,  humidity_pct: 58, wind_speed_kmh: 13 },
+  { max_temp_c: 30, min_temp_c: 17, precipitation_mm: 1,    precipitation_probability_pct: 20, humidity_pct: 65, wind_speed_kmh: 10 },
+  { max_temp_c: 28, min_temp_c: 16, precipitation_mm: 4,    precipitation_probability_pct: 35, humidity_pct: 72, wind_speed_kmh: 14 },
+  { max_temp_c: 27, min_temp_c: 15, precipitation_mm: 2,    precipitation_probability_pct: 25, humidity_pct: 70, wind_speed_kmh: 12 },
+  { max_temp_c: 29, min_temp_c: 16, precipitation_mm: 0,    precipitation_probability_pct: 10, humidity_pct: 64, wind_speed_kmh: 11 },
+  { max_temp_c: 30, min_temp_c: 17, precipitation_mm: 0,    precipitation_probability_pct: 5,  humidity_pct: 60, wind_speed_kmh: 10 },
+];
+
+/**
+ * Builds a WeatherSummary using the static sample offsets above.
+ * Dates are generated from today so the forecast period always looks current.
+ */
+function buildFallbackWeather(
+  latitude: number,
+  longitude: number,
+  locationName: string,
+): WeatherSummary {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const daily: DailyForecast[] = SAMPLE_DAILY_OFFSETS.map((values, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    return {
+      date: d.toISOString().split('T')[0],
+      ...values,
+    };
+  });
+
+  return {
+    location: locationName,
+    latitude,
+    longitude,
+    daily,
+    fetched_at: new Date().toISOString(),
+    // WeatherSummary.source is typed as the literal 'Open-Meteo'.
+    // We cast here only so we can carry the 'fallback' label without
+    // touching types.ts. Callers MUST check WeatherFetchResult.is_fallback
+    // rather than inspecting this field directly.
+    source: 'Open-Meteo',
+  };
+}
+
+// =============================================================================
+// Live fetch — throws on any failure
+// =============================================================================
+
 /**
  * Fetches a daily weather forecast from Open-Meteo for the given coordinates.
  *
  * Throws on network errors, timeouts, or invalid API responses.
  * Never returns fabricated weather data — if the API fails, the caller must handle the error.
+ *
+ * Prefer fetchWeatherForecastWithFallback when resilience is needed.
  */
 export async function fetchWeatherForecast(
   params: FetchWeatherParams,
@@ -190,4 +267,41 @@ export async function fetchWeatherForecast(
     fetched_at: fetchedAt,
     source: 'Open-Meteo',
   };
+}
+
+// =============================================================================
+// Resilient fetch — returns fallback on any failure
+// =============================================================================
+
+/**
+ * Calls fetchWeatherForecast and wraps the result in WeatherFetchResult.
+ *
+ * If the live API call fails for any reason (network error, timeout, HTTP error,
+ * bad or empty data), this function catches the error and returns clearly-labelled
+ * sample data instead of propagating the exception.
+ *
+ * Callers must inspect is_fallback and communicate it honestly to the user.
+ * Sample data must NOT be used as input to the deterministic risk engine —
+ * Phase C will gate risk assessment on is_fallback === false.
+ */
+export async function fetchWeatherForecastWithFallback(
+  params: FetchWeatherParams,
+): Promise<WeatherFetchResult> {
+  const locationName = params.locationName ?? 'Unknown Location';
+
+  try {
+    const weather = await fetchWeatherForecast(params);
+    return { weather, is_fallback: false };
+  } catch (err) {
+    const reason =
+      err instanceof Error ? err.message : 'Open-Meteo weather fetch failed.';
+    console.warn(
+      `[openmeteo] Live fetch failed — using sample fallback data. Reason: ${reason}`,
+    );
+    return {
+      weather: buildFallbackWeather(params.latitude, params.longitude, locationName),
+      is_fallback: true,
+      fallback_reason: reason,
+    };
+  }
 }

@@ -13,9 +13,10 @@
 import { corsHeaders } from '../_shared/cors.ts';
 import type { FarmerInput, WeatherSummary } from '../_shared/types.ts';
 import {
-  fetchWeatherForecast,
+  fetchWeatherForecastWithFallback,
   isWeatherDataStale,
   weatherDataCompletenessRatio,
+  type WeatherFetchResult,
 } from '../_shared/weather/openmeteo.ts';
 import { geocodeLocation } from '../_shared/geocoding/openmeteo-geocoding.ts';
 
@@ -78,46 +79,41 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
 
-    // ── Phase B: Fetch weather from Open-Meteo ────────────────────────────────
-    let weatherSummary: WeatherSummary;
+    // ── Phase B: Fetch weather from Open-Meteo (with automatic fallback) ──────────
+    // fetchWeatherForecastWithFallback never throws — on any API failure it
+    // returns clearly-labelled sample data and sets is_fallback: true.
+    const weatherResult: WeatherFetchResult = await fetchWeatherForecastWithFallback({
+      latitude: resolvedLat,
+      longitude: resolvedLon,
+      locationName: resolvedLocationName,
+      forecastDays: 7,
+    });
+
+    const weatherSummary: WeatherSummary = weatherResult.weather;
     const weatherWarnings: string[] = [];
 
-    try {
-      weatherSummary = await fetchWeatherForecast({
-        latitude: resolvedLat,
-        longitude: resolvedLon,
-        locationName: resolvedLocationName,
-        forecastDays: 7,
-      });
-    } catch (weatherError) {
-      const message =
-        weatherError instanceof Error
-          ? weatherError.message
-          : 'Weather data could not be fetched.';
-      console.error('[generate-advisory] Weather fetch failed:', message);
-      return errorResponse(503, `${message} Please try again later.`);
+    // Data-quality checks — only meaningful for live data.
+    if (!weatherResult.is_fallback) {
+      if (isWeatherDataStale(weatherSummary)) {
+        weatherWarnings.push(
+          'Weather data appears anchored to a past date and may not reflect current conditions.',
+        );
+      }
+      const completeness = weatherDataCompletenessRatio(weatherSummary);
+      if (completeness > 0.3) {
+        weatherWarnings.push(
+          `${Math.round(completeness * 100)}% of weather parameters are missing. Risk assessment reliability may be reduced.`,
+        );
+      }
     }
 
-    // Data-quality checks — stale or incomplete data is surfaced as warnings,
-    // not silently ignored. Never invent weather values.
-    if (isWeatherDataStale(weatherSummary)) {
-      weatherWarnings.push(
-        'Weather data appears anchored to a past date and may not reflect current conditions.',
-      );
-    }
-    const completeness = weatherDataCompletenessRatio(weatherSummary);
-    if (completeness > 0.3) {
-      weatherWarnings.push(
-        `${Math.round(completeness * 100)}% of weather parameters are missing. Risk assessment reliability may be reduced.`,
-      );
-    }
     if (geocodeWarning) weatherWarnings.push(geocodeWarning);
 
     // ── TODO (Phase C): Run crop-specific risk engine ────────────────────────
     // ── TODO (Phase D): Call Gemini for advisory text ────────────────────────
     // ── TODO (Phase E): Persist advisory to Supabase DB ─────────────────────
 
-    // Phase B partial response — weather is real, risks + advisory coming in C–E.
+    // Phase B partial response — weather is real (or labelled sample), risks + advisory coming in C–E.
     return new Response(
       JSON.stringify({
         status: 'partial',
@@ -132,6 +128,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
           language: farmerInput.language,
         },
         weather_summary: weatherSummary,
+        // Tells the frontend and team exactly where the data came from.
+        weather_source: weatherResult.is_fallback ? 'fallback' : 'live',
+        // Honest note shown whenever sample data is served instead of a live forecast.
+        weather_data_note: weatherResult.is_fallback
+          ? 'Weather data unavailable, using sample data. Figures shown are for demonstration only and do not reflect current conditions.'
+          : null,
         weather_warnings: weatherWarnings,
         generated_at: new Date().toISOString(),
       }),
