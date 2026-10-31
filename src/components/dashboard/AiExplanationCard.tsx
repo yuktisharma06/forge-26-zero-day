@@ -8,10 +8,11 @@ import type { Bilingual } from '../../types/farm';
 
 interface AiExplanationCardProps {
   summary: Bilingual | null;
+  actions: Bilingual[];
   onRetry: () => void;
 }
 
-export default function AiExplanationCard({ summary, onRetry }: AiExplanationCardProps) {
+export default function AiExplanationCard({ summary, actions, onRetry }: AiExplanationCardProps) {
   const { t } = useLanguage();
 
   if (!summary) {
@@ -37,6 +38,16 @@ export default function AiExplanationCard({ summary, onRetry }: AiExplanationCar
         {t(copy.aiTitle)}
       </h2>
       <p className="text-lg leading-relaxed text-neutral-900">{t(summary)}</p>
+      {actions.length > 0 && (
+        <ul className="flex flex-col gap-2">
+          {actions.map((action) => (
+            <li key={action.en} className="flex gap-2 text-base text-neutral-900">
+              <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-primary-600" aria-hidden="true" />
+              {t(action)}
+            </li>
+          ))}
+        </ul>
+      )}
       <SpeakerButton text={t(summary)} />
     </Card>
   );

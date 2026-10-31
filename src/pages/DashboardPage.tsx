@@ -67,7 +67,7 @@ export default function DashboardPage() {
 
           <RiskSection risks={state.data.risks} insufficientData={state.data.insufficientData} />
 
-          <AiExplanationCard summary={state.data.aiSummary} onRetry={refresh} />
+          <AiExplanationCard summary={state.data.aiSummary} actions={state.data.actions} onRetry={refresh} />
 
           <WeatherPanel forecast={state.data.forecast} />
 

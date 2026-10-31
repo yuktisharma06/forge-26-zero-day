@@ -43,7 +43,7 @@ export interface DailyForecast {
   tempMax: number;
   tempMin: number;
   precipitation: number;
-  rainProbability: number;
+  rainProbability: number | null;
   humidity: number;
   windSpeed: number;
 }
@@ -76,4 +76,5 @@ export interface AdvisoryResponse {
   risks: WeatherRisk[];
   insufficientData: Bilingual | null;
   aiSummary: Bilingual | null;
+  actions: Bilingual[];
 }

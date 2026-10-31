@@ -24,7 +24,7 @@ function Metric({ icon, label, value }: { icon: ReactNode; label: string; value:
 
 function DayCard({ day }: { day: DailyForecast }) {
   const { lang } = useLanguage();
-  const rainy = day.rainProbability >= 50;
+  const rainy = day.rainProbability !== null && day.rainProbability >= 50;
 
   return (
     <div className="flex min-w-24 flex-col items-center gap-2 rounded-xl border border-neutral-200 bg-white p-3 text-center">
@@ -39,7 +39,7 @@ function DayCard({ day }: { day: DailyForecast }) {
       </span>
       <span className="flex items-center gap-1 text-xs text-neutral-600">
         <Droplets className="h-3.5 w-3.5" aria-hidden="true" />
-        {day.rainProbability}%
+        {day.rainProbability === null ? '-' : `${day.rainProbability}%`}
       </span>
     </div>
   );
@@ -68,7 +68,7 @@ export default function WeatherPanel({ forecast }: WeatherPanelProps) {
           <Metric
             icon={<CloudRain className="h-3.5 w-3.5" aria-hidden="true" />}
             label={t(copy.rainChance)}
-            value={`${today.rainProbability}%`}
+            value={today.rainProbability === null ? '-' : `${today.rainProbability}%`}
           />
           <Metric
             icon={<Droplets className="h-3.5 w-3.5" aria-hidden="true" />}

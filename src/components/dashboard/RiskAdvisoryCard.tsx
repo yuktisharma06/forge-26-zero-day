@@ -40,20 +40,22 @@ export default function RiskAdvisoryCard({ risk, priority = false }: RiskAdvisor
         <p className="text-base leading-relaxed text-neutral-900">{t(risk.whyItMatters)}</p>
       </section>
 
-      <section className="flex flex-col gap-2">
-        <h4 className="flex items-center gap-2 text-sm font-semibold text-neutral-700">
-          <ListChecks className="h-4 w-4" aria-hidden="true" />
-          {t(copy.precautionsTitle)}
-        </h4>
-        <ul className="flex flex-col gap-2">
-          {risk.precautions.map((precaution) => (
-            <li key={precaution.en} className="flex gap-2 text-base text-neutral-900">
-              <Sprout className="mt-1 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
-              {t(precaution)}
-            </li>
-          ))}
-        </ul>
-      </section>
+      {risk.precautions.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h4 className="flex items-center gap-2 text-sm font-semibold text-neutral-700">
+            <ListChecks className="h-4 w-4" aria-hidden="true" />
+            {t(copy.precautionsTitle)}
+          </h4>
+          <ul className="flex flex-col gap-2">
+            {risk.precautions.map((precaution) => (
+              <li key={precaution.en} className="flex gap-2 text-base text-neutral-900">
+                <Sprout className="mt-1 h-4 w-4 shrink-0 text-primary-600" aria-hidden="true" />
+                {t(precaution)}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {risk.sources.length > 0 && (
         <section className="flex flex-col gap-2 border-t border-neutral-200 pt-4">
