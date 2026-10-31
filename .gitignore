@@ -151,3 +151,5 @@ venv/
 supabase/.branches/
 
 functions.zip
+
+.vscode/
