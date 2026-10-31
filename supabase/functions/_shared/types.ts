@@ -17,7 +17,7 @@ export type SugarcaneStage =
 
 export type WheatStage =
   | 'early_growth'
-  | 'cri'
+  | 'crown_root'           // Crown Root Initiation (CRI)
   | 'vegetative_growth'
   | 'reproductive'
   | 'grain_development_maturity';
@@ -57,7 +57,7 @@ export interface DailyForecast {
   min_temp_c: number | null;           // Minimum temperature (°C)
   precipitation_mm: number | null;     // Total daily rainfall (mm)
   precipitation_probability_pct: number | null; // Max precipitation probability (%)
-  humidity_pct: number | null;         // Maximum relative humidity (%)
+  humidity_pct: number | null;         // Mean daily relative humidity (%) — relative_humidity_2m_mean
   wind_speed_kmh: number | null;       // Maximum wind speed (km/h)
 }
 

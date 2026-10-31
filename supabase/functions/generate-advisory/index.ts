@@ -5,7 +5,7 @@
 //
 // Phase A  — scaffold, CORS, input validation ✅
 // Phase B  — Open-Meteo weather fetch + geocoding ✅
-// Phase C  — crop-specific risk engine (TODO)
+// Phase C  — crop-specific risk engine ✅
 // Phase D  — Gemini advisory generation (TODO)
 // Phase E  — Supabase persistence + combined response (TODO)
 // =============================================================================
@@ -19,6 +19,7 @@ import {
   type WeatherFetchResult,
 } from '../_shared/weather/openmeteo.ts';
 import { geocodeLocation } from '../_shared/geocoding/openmeteo-geocoding.ts';
+import { runRiskEngine } from '../_shared/risk-engine/index.ts';
 
 Deno.serve(async (req: Request): Promise<Response> => {
   // ── Preflight ──────────────────────────────────────────────────────────────
@@ -109,16 +110,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     if (geocodeWarning) weatherWarnings.push(geocodeWarning);
 
-    // ── TODO (Phase C): Run crop-specific risk engine ────────────────────────
+    // ── Phase C: Run crop-specific risk engine ───────────────────────────────
+    const riskResult = runRiskEngine({
+      crop: farmerInput.crop,
+      growth_stage: farmerInput.growth_stage,
+      daily_forecast: weatherSummary.daily,
+      is_fallback: weatherResult.is_fallback,
+    });
+
     // ── TODO (Phase D): Call Gemini for advisory text ────────────────────────
     // ── TODO (Phase E): Persist advisory to Supabase DB ─────────────────────
 
-    // Phase B partial response — weather is real (or labelled sample), risks + advisory coming in C–E.
+    // Phase C response — weather (live or labelled sample) + structured risk results.
     return new Response(
       JSON.stringify({
         status: 'partial',
-        phase: 'B_weather_only',
-        note: 'Risk engine (Phase C) and AI advisory (Phase D) not yet integrated.',
+        phase: 'C_risk_engine',
+        note: 'Risk engine results included. AI advisory (Phase D) and persistence (Phase E) not yet integrated.',
         farmer_input: {
           location: resolvedLocationName,
           latitude: resolvedLat,
@@ -135,6 +143,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
           ? 'Weather data unavailable, using sample data. Figures shown are for demonstration only and do not reflect current conditions.'
           : null,
         weather_warnings: weatherWarnings,
+        // ── Risk engine output ───────────────────────────────────────────────
+        risk_engine_status: riskResult.status,
+        risk_engine_status_message: riskResult.status_message ?? null,
+        detected_risks: riskResult.detected_risks,
         generated_at: new Date().toISOString(),
       }),
       {
@@ -159,7 +171,7 @@ const VALID_CROPS = new Set(['sugarcane', 'wheat']);
 const VALID_LANGUAGES = new Set(['en', 'hi']);
 const VALID_WHEAT_STAGES = new Set([
   'early_growth',
-  'cri',
+  'crown_root',            // Crown Root Initiation (CRI)
   'vegetative_growth',
   'reproductive',
   'grain_development_maturity',

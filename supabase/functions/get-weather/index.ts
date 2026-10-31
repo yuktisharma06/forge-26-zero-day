@@ -37,9 +37,16 @@ interface GetWeatherRequest {
 // ── Response envelope ─────────────────────────────────────────────────────────
 interface GetWeatherResponse {
   weather: WeatherSummary;
-  stale: boolean;             // true if forecast dates appear out of date
-  data_completeness: number;  // 0.0 (all present) – 1.0 (all missing)
-  warnings: string[];         // Non-fatal data-quality notices
+  stale: boolean;               // true if forecast dates appear out of date
+  /**
+   * Fraction of weather parameters that are NULL (0.0 = all present, 1.0 = all missing).
+   * NOTE: a value of 0 means the data is COMPLETE, not absent.
+   * Use data_present_pct for a human-readable completeness percentage.
+   */
+  data_completeness: number;
+  /** Percentage of weather parameters that ARE present (0–100, where 100 = fully complete). */
+  data_present_pct: number;
+  warnings: string[];           // Non-fatal data-quality notices
 }
 
 // =============================================================================
@@ -156,7 +163,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const responseBody: GetWeatherResponse = {
       weather,
       stale,
+      // Fraction of parameters that are NULL. 0 = all data present (fully complete).
       data_completeness: Math.round(completeness * 100) / 100,
+      // Human-readable inverse: 100 means all parameters are present.
+      data_present_pct: Math.round((1 - completeness) * 100),
       warnings,
     };
 

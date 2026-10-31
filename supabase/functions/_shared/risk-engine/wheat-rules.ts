@@ -130,11 +130,11 @@ export const WHEAT_RISK_RULES: RiskRule[] = [
       'Pending validation against ICAR/KVK Saharanpur-specific frost thresholds. Used as qualitative warning only until local data is confirmed.',
   },
 
-  // ── CRI — Crown Root Initiation ──────────────────────────────────────────
+  // ── CROWN ROOT INITIATION (CRI) ──────────────────────────────────────────
   {
-    id: 'wheat_cri_cold_stress',
+    id: 'wheat_crown_root_cold_stress',
     crop: 'wheat',
-    growth_stage: 'cri',
+    growth_stage: 'crown_root',
     weather_parameter: 'min_temp_c',
     threshold_operator: 'lt',
     threshold_value: 5,
@@ -152,9 +152,9 @@ export const WHEAT_RISK_RULES: RiskRule[] = [
   },
 
   {
-    id: 'wheat_cri_excess_rain',
+    id: 'wheat_crown_root_excess_rain',
     crop: 'wheat',
-    growth_stage: 'cri',
+    growth_stage: 'crown_root',
     weather_parameter: 'precipitation_mm',
     threshold_operator: 'gt',
     threshold_value: 30,

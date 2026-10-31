@@ -45,7 +45,7 @@ interface OpenMeteoApiResponse {
     temperature_2m_min: (number | null)[];
     precipitation_sum: (number | null)[];
     precipitation_probability_max: (number | null)[];
-    relative_humidity_2m_max: (number | null)[];
+    relative_humidity_2m_mean: (number | null)[];
     wind_speed_10m_max: (number | null)[];
   };
   daily_units: Record<string, string>;
@@ -201,7 +201,7 @@ export async function fetchWeatherForecast(
       'temperature_2m_min',
       'precipitation_sum',
       'precipitation_probability_max',
-      'relative_humidity_2m_max',
+      'relative_humidity_2m_mean',
       'wind_speed_10m_max',
     ].join(','),
     timezone: 'Asia/Kolkata',
@@ -255,7 +255,7 @@ export async function fetchWeatherForecast(
     min_temp_c: apiData.daily.temperature_2m_min[i] ?? null,
     precipitation_mm: apiData.daily.precipitation_sum[i] ?? null,
     precipitation_probability_pct: apiData.daily.precipitation_probability_max[i] ?? null,
-    humidity_pct: apiData.daily.relative_humidity_2m_max[i] ?? null,
+    humidity_pct: apiData.daily.relative_humidity_2m_mean[i] ?? null,
     wind_speed_kmh: apiData.daily.wind_speed_10m_max[i] ?? null,
   }));
 

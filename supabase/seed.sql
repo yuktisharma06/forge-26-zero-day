@@ -83,7 +83,7 @@ INSERT INTO risk_rules (
 
 -- ── CRI (Crown Root Initiation) ───────────────────────────────────────────
 (
-  'wheat', 'cri', 'min_temp_c', 'lt', 5, '°C',
+  'wheat', 'crown_root', 'min_temp_c', 'lt', 5, '°C',
   'Cold Stress at CRI Stage', 'Low', 'pending_validation',
   'General agricultural guidance for wheat in north India', NULL,
   'Apply the first CRI irrigation to moderate soil temperature. Avoid nitrogen application during cold-stress periods.',
@@ -92,7 +92,7 @@ INSERT INTO risk_rules (
 ),
 
 (
-  'wheat', 'cri', 'precipitation_mm', 'gt', 30, 'mm/day',
+  'wheat', 'crown_root', 'precipitation_mm', 'gt', 30, 'mm/day',
   'Excess Rainfall / Waterlogging Risk at CRI', 'Moderate', 'pending_validation',
   'General agricultural guidance for wheat drainage management', NULL,
   'Ensure field drainage channels are clear. Avoid irrigating until soil moisture decreases. Excess water at CRI stage can impair crown root development and increase disease susceptibility.',
