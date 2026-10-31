@@ -147,11 +147,11 @@ export default function FarmerDetailsPage() {
           {t(copy.back)}
         </Button>
         {isLastStep ? (
-          <Button onClick={submit} className="min-w-44" icon={<ArrowRight className="h-5 w-5" aria-hidden="true" />}>
+          <Button onClick={submit} className="min-w-0 flex-1 sm:min-w-44 sm:flex-none" icon={<ArrowRight className="h-5 w-5" aria-hidden="true" />}>
             {t(copy.getAdvice)}
           </Button>
         ) : (
-          <Button onClick={goNext} className="min-w-44" icon={<ArrowRight className="h-5 w-5" aria-hidden="true" />}>
+          <Button onClick={goNext} className="min-w-0 flex-1 sm:min-w-44 sm:flex-none" icon={<ArrowRight className="h-5 w-5" aria-hidden="true" />}>
             {t(copy.next)}
           </Button>
         )}
