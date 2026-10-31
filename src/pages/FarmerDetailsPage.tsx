@@ -26,6 +26,7 @@ export default function FarmerDetailsPage() {
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<FarmerDraft>(EMPTY_DRAFT);
   const [error, setError] = useState<Bilingual | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
   const isLastStep = step === STEP_COUNT - 1;
 
   function updateDraft(patch: Partial<FarmerDraft>) {
@@ -63,6 +64,11 @@ export default function FarmerDetailsPage() {
 
     const { location, cropId, stageId } = draft;
     if (!location || !cropId || !stageId) {
+      return;
+    }
+
+    if (!confirmed) {
+      setError(copy.confirmRequired);
       return;
     }
 
@@ -111,6 +117,21 @@ export default function FarmerDetailsPage() {
           </div>
 
           {renderStep()}
+
+          {isLastStep && (
+            <label className="flex items-start gap-3 rounded-xl border-2 border-neutral-200 p-4 text-base text-neutral-900">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={(event) => {
+                  setConfirmed(event.target.checked);
+                  setError(null);
+                }}
+                className="mt-1 h-5 w-5 shrink-0 accent-primary-600"
+              />
+              <span>{t(copy.confirmDetails)}</span>
+            </label>
+          )}
 
           {error && (
             <p role="alert" className="flex items-start gap-2 rounded-xl bg-error-50 p-4 text-base font-medium text-error-700">

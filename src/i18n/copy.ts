@@ -56,6 +56,14 @@ export const copy = {
   summaryCrop: { hi: 'फसल', en: 'Crop' },
   summaryStage: { hi: 'चरण', en: 'Growth stage' },
   summarySowing: { hi: 'बुवाई', en: 'Sowing date' },
+  confirmDetails: {
+    hi: 'मैंने ऊपर दी गई जानकारी जांच ली है और वह सही है।',
+    en: 'I have checked these details and they are correct.',
+  },
+  confirmRequired: {
+    hi: 'सलाह देखने से पहले कृपया जानकारी की पुष्टि करें।',
+    en: 'Please confirm your details before getting advice.',
+  },
   errors: {
     location: { hi: 'कृपया अपना स्थान चुनें।', en: 'Please choose your location.' },
     crop: { hi: 'कृपया फसल चुनें।', en: 'Please choose your crop.' },
