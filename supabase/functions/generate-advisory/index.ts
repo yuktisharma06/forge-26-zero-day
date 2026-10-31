@@ -20,6 +20,7 @@ import {
 } from '../_shared/weather/openmeteo.ts';
 import { geocodeLocation } from '../_shared/geocoding/openmeteo-geocoding.ts';
 import { runRiskEngine } from '../_shared/risk-engine/index.ts';
+import { generateAiAdvisory } from '../_shared/gemini/advisory.ts';
 
 Deno.serve(async (req: Request): Promise<Response> => {
   // ── Preflight ──────────────────────────────────────────────────────────────
@@ -121,15 +122,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
       is_stale: weatherIsStale,
     });
 
-    // ── TODO (Phase D): Call Gemini for advisory text ────────────────────────
+    const aiAdvisory = await generateAiAdvisory(
+      { crop: farmerInput.crop, growth_stage: farmerInput.growth_stage, language: farmerInput.language, engine: riskResult },
+      { apiKey: Deno.env.get('GEMINI_API_KEY'), model: Deno.env.get('GEMINI_MODEL') },
+    );
     // ── TODO (Phase E): Persist advisory to Supabase DB ─────────────────────
 
     // Phase C response — weather (live or labelled sample) + structured risk results.
     return new Response(
       JSON.stringify({
         status: 'partial',
-        phase: 'C_risk_engine',
-        note: 'Risk engine results included. AI advisory (Phase D) and persistence (Phase E) not yet integrated.',
+        phase: 'D_gemini_advisory',
+        note: 'Risk engine results and AI advisory included. Persistence (Phase E) not yet integrated.',
         farmer_input: {
           location: resolvedLocationName,
           latitude: resolvedLat,
@@ -153,11 +157,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
         rules_evaluated: riskResult.rules_evaluated,
         detected_risks: riskResult.detected_risks,
         not_assessed_risks: riskResult.not_assessed,
+        ai_advisory: aiAdvisory,
+        ai_fallback: aiAdvisory.status === 'fallback',
         generated_at: new Date().toISOString(),
       }),
       {
         status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' },
       },
     );
   } catch (err) {

@@ -121,10 +121,41 @@ test('Hindi fallback uses the engine Hindi action text', async () => {
 });
 
 test('HTTP error → fallback api_error', async () => {
-  const m = mockFetch(() => new Response('boom', { status: 503 }));
-  const a = await run('en', { apiKey: 'k', fetchImpl: m.fn });
+  const m = mockFetch(() => new Response('boom', { status: 400 }));
+  const a = await run('en', { apiKey: 'k', fetchImpl: m.fn, retryDelayMs: 0 });
   assert.equal(a.fallback_reason, 'api_error');
   assert.equal(a.risks.length, 2);
+  assert.equal(m.calls.length, 1, 'a 400 is not retried');
+});
+
+test('temporary 503 is retried once and can succeed', async () => {
+  let n = 0;
+  const m = mockFetch(() => (++n === 1 ? new Response('overloaded', { status: 503 }) : geminiReply(goodEn)));
+  const a = await run('en', { apiKey: 'k', fetchImpl: m.fn, retryDelayMs: 0 });
+  assert.equal(m.calls.length, 2);
+  assert.equal(a.status, 'generated');
+});
+
+test('503 twice → fallback after exactly two attempts', async () => {
+  const m = mockFetch(() => new Response('overloaded', { status: 503 }));
+  const a = await run('en', { apiKey: 'k', fetchImpl: m.fn, retryDelayMs: 0 });
+  assert.equal(m.calls.length, 2);
+  assert.equal(a.status, 'fallback');
+  assert.equal(a.fallback_reason, 'api_error');
+});
+
+test('429 is retried; 401 and 404 are not', async () => {
+  for (const [status, calls] of [[429, 2], [401, 1], [404, 1]] as const) {
+    const m = mockFetch(() => new Response('x', { status }));
+    await run('en', { apiKey: 'k', fetchImpl: m.fn, retryDelayMs: 0 });
+    assert.equal(m.calls.length, calls, `status ${status}`);
+  }
+});
+
+test('a timeout is not retried (keeps the farmer from waiting twice)', async () => {
+  const m = mockFetch(() => { const e = new Error('t'); e.name = 'TimeoutError'; throw e; });
+  await run('en', { apiKey: 'k', fetchImpl: m.fn, retryDelayMs: 0 });
+  assert.equal(m.calls.length, 1);
 });
 
 test('timeout → fallback timeout', async () => {
@@ -134,7 +165,7 @@ test('timeout → fallback timeout', async () => {
 
 test('network failure → fallback api_error', async () => {
   const m = mockFetch(() => { throw new TypeError('fetch failed'); });
-  assert.equal((await run('en', { apiKey: 'k', fetchImpl: m.fn })).fallback_reason, 'api_error');
+  assert.equal((await run('en', { apiKey: 'k', fetchImpl: m.fn, retryDelayMs: 0 })).fallback_reason, 'api_error');
 });
 
 test('safety block → fallback blocked', async () => {

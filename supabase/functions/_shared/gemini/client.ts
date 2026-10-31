@@ -11,6 +11,9 @@ import type { AiFallbackReason } from '../types.ts';
 
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 export const DEFAULT_TIMEOUT_MS = 20_000;
+/** One retry, only for errors Google describes as temporary. Timeouts are not retried. */
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+export const DEFAULT_RETRY_DELAY_MS = 1_500;
 
 export type GeminiResult =
   | { ok: true; text: string }
@@ -22,7 +25,26 @@ export async function callGemini(args: {
   body: unknown;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  /** Pause before the single retry. Tests set 0. */
+  retryDelayMs?: number;
 }): Promise<GeminiResult> {
+  const first = await callOnce(args);
+  const temporary = !first.ok && first.reason === 'api_error' && first.retryable === true;
+  if (!temporary) return first;
+
+  await new Promise((r) => setTimeout(r, args.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS));
+  return await callOnce(args);
+}
+
+type OnceResult = GeminiResult & { retryable?: boolean };
+
+async function callOnce(args: {
+  apiKey: string;
+  model: string;
+  body: unknown;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+}): Promise<OnceResult> {
   const { apiKey, model, body, timeoutMs = DEFAULT_TIMEOUT_MS, fetchImpl = fetch } = args;
   const url = `${BASE_URL}/${encodeURIComponent(model)}:generateContent`;
 
@@ -39,12 +61,17 @@ export async function callGemini(args: {
     if (name === 'TimeoutError' || name === 'AbortError') {
       return { ok: false, reason: 'timeout', detail: `no response within ${timeoutMs} ms` };
     }
-    return { ok: false, reason: 'api_error', detail: 'network error' };
+    return { ok: false, reason: 'api_error', detail: 'network error', retryable: true };
   }
 
   if (!res.ok) {
     // Status only: the error body can echo request details, so it is not logged.
-    return { ok: false, reason: 'api_error', detail: `HTTP ${res.status}` };
+    return {
+      ok: false,
+      reason: 'api_error',
+      detail: `HTTP ${res.status}`,
+      retryable: RETRYABLE_STATUS.has(res.status),
+    };
   }
 
   let json: any;

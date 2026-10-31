@@ -35,6 +35,7 @@ export interface AdvisoryDeps {
   apiKey?: string;
   model?: string;
   timeoutMs?: number;
+  retryDelayMs?: number;
   fetchImpl?: typeof fetch;
 }
 
@@ -69,6 +70,7 @@ export async function generateAiAdvisory(
       model,
       body: buildRequestBody(facts, language),
       timeoutMs: deps.timeoutMs,
+      retryDelayMs: deps.retryDelayMs,
       fetchImpl: deps.fetchImpl,
     });
     if (!result.ok) return fallback(result.reason, result.detail);
