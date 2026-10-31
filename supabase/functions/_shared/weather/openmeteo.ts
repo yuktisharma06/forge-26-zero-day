@@ -9,6 +9,17 @@ import type { DailyForecast, WeatherSummary } from '../types.ts';
 
 const OPEN_METEO_BASE_URL = 'https://api.open-meteo.com/v1/forecast';
 
+/**
+ * How many days old the earliest forecast day may be before the data is
+ * considered stale. Open-Meteo typically returns today onward; if the first
+ * day in the response is more than STALE_THRESHOLD_DAYS in the past the
+ * caller should warn the user rather than trust the data.
+ */
+const STALE_THRESHOLD_DAYS = 2;
+
+/** Request timeout for the Open-Meteo API call (ms) */
+const FETCH_TIMEOUT_MS = 15_000;
+
 /** Default coordinates for Saharanpur, Uttar Pradesh */
 export const SAHARANPUR_COORDS = {
   latitude: 29.9648,
@@ -41,9 +52,58 @@ interface OpenMeteoApiResponse {
 }
 
 /**
+ * Indicates whether fetched weather data should be treated as stale.
+ *
+ * A forecast is stale when the first date in the daily array is more than
+ * STALE_THRESHOLD_DAYS before today. This can happen if Open-Meteo returns
+ * cached data anchored to a past date.
+ */
+export function isWeatherDataStale(weather: WeatherSummary): boolean {
+  if (!weather.daily || weather.daily.length === 0) return true;
+
+  const firstDate = new Date(weather.daily[0].date);
+  const today = new Date();
+  // Zero out time components for a clean day comparison
+  today.setHours(0, 0, 0, 0);
+  firstDate.setHours(0, 0, 0, 0);
+
+  const diffDays = (today.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24);
+  return diffDays > STALE_THRESHOLD_DAYS;
+}
+
+/**
+ * Counts how many required weather parameters are null across all forecast days.
+ * Returns a ratio (0.0 = all data present, 1.0 = all data missing).
+ */
+export function weatherDataCompletenessRatio(weather: WeatherSummary): number {
+  if (!weather.daily || weather.daily.length === 0) return 1.0;
+
+  const parameters: (keyof DailyForecast)[] = [
+    'max_temp_c',
+    'min_temp_c',
+    'precipitation_mm',
+    'precipitation_probability_pct',
+    'humidity_pct',
+    'wind_speed_kmh',
+  ];
+
+  let total = 0;
+  let nullCount = 0;
+
+  for (const day of weather.daily) {
+    for (const param of parameters) {
+      total++;
+      if (day[param] === null) nullCount++;
+    }
+  }
+
+  return total === 0 ? 1.0 : nullCount / total;
+}
+
+/**
  * Fetches a daily weather forecast from Open-Meteo for the given coordinates.
  *
- * Throws on network errors or invalid API responses.
+ * Throws on network errors, timeouts, or invalid API responses.
  * Never returns fabricated weather data — if the API fails, the caller must handle the error.
  */
 export async function fetchWeatherForecast(
@@ -77,8 +137,13 @@ export async function fetchWeatherForecast(
 
   let response: Response;
   try {
-    response = await fetch(url);
+    response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   } catch (networkError) {
+    if (networkError instanceof DOMException && networkError.name === 'TimeoutError') {
+      throw new Error(
+        `Open-Meteo API request timed out after ${FETCH_TIMEOUT_MS / 1000}s. Please try again.`,
+      );
+    }
     throw new Error(
       `Network error while contacting Open-Meteo: ${
         networkError instanceof Error ? networkError.message : String(networkError)

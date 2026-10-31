@@ -1,15 +1,23 @@
 // =============================================================================
 // generate-advisory — Main Edge Function
 // =============================================================================
-// This is the single entry point the frontend will call.
-// Phases B–E will implement the full logic; this scaffold wires up the
-// request/response shell, CORS handling, input validation, and error envelopes.
+// Single entry point the frontend calls to get weather + risk advisory.
 //
-// Current state (Phase A): scaffold only — returns HTTP 501 Not Implemented.
+// Phase A  — scaffold, CORS, input validation ✅
+// Phase B  — Open-Meteo weather fetch + geocoding ✅
+// Phase C  — crop-specific risk engine (TODO)
+// Phase D  — Gemini advisory generation (TODO)
+// Phase E  — Supabase persistence + combined response (TODO)
 // =============================================================================
 
 import { corsHeaders } from '../_shared/cors.ts';
-import type { FarmerInput, AdvisoryResponse } from '../_shared/types.ts';
+import type { FarmerInput, WeatherSummary } from '../_shared/types.ts';
+import {
+  fetchWeatherForecast,
+  isWeatherDataStale,
+  weatherDataCompletenessRatio,
+} from '../_shared/weather/openmeteo.ts';
+import { geocodeLocation } from '../_shared/geocoding/openmeteo-geocoding.ts';
 
 Deno.serve(async (req: Request): Promise<Response> => {
   // ── Preflight ──────────────────────────────────────────────────────────────
@@ -42,26 +50,93 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // Type assertion is safe because validateFarmerInput confirmed required fields.
     const farmerInput = body as FarmerInput;
 
-    // ── TODO (Phase B): Fetch weather forecast from Open-Meteo ───────────────
+    // ── Phase B: Resolve coordinates ─────────────────────────────────────────
+    // If the client sent a location string without coordinates, geocode it.
+    // If explicit lat/lon were provided they are already validated above.
+    let resolvedLat = farmerInput.latitude;
+    let resolvedLon = farmerInput.longitude;
+    let resolvedLocationName = farmerInput.location;
+    let geocodeWarning: string | undefined;
+
+    const coordsArePlaceholders =
+      farmerInput.latitude === 0 && farmerInput.longitude === 0;
+
+    if (coordsArePlaceholders && farmerInput.location.trim() !== '') {
+      // Client sent 0,0 as sentinel — attempt geocoding
+      try {
+        const geo = await geocodeLocation(farmerInput.location.trim());
+        resolvedLat = geo.latitude;
+        resolvedLon = geo.longitude;
+        resolvedLocationName = geo.name;
+      } catch (geoError) {
+        return errorResponse(
+          422,
+          geoError instanceof Error
+            ? geoError.message
+            : 'Could not resolve location to coordinates.',
+        );
+      }
+    }
+
+    // ── Phase B: Fetch weather from Open-Meteo ────────────────────────────────
+    let weatherSummary: WeatherSummary;
+    const weatherWarnings: string[] = [];
+
+    try {
+      weatherSummary = await fetchWeatherForecast({
+        latitude: resolvedLat,
+        longitude: resolvedLon,
+        locationName: resolvedLocationName,
+        forecastDays: 7,
+      });
+    } catch (weatherError) {
+      const message =
+        weatherError instanceof Error
+          ? weatherError.message
+          : 'Weather data could not be fetched.';
+      console.error('[generate-advisory] Weather fetch failed:', message);
+      return errorResponse(503, `${message} Please try again later.`);
+    }
+
+    // Data-quality checks — stale or incomplete data is surfaced as warnings,
+    // not silently ignored. Never invent weather values.
+    if (isWeatherDataStale(weatherSummary)) {
+      weatherWarnings.push(
+        'Weather data appears anchored to a past date and may not reflect current conditions.',
+      );
+    }
+    const completeness = weatherDataCompletenessRatio(weatherSummary);
+    if (completeness > 0.3) {
+      weatherWarnings.push(
+        `${Math.round(completeness * 100)}% of weather parameters are missing. Risk assessment reliability may be reduced.`,
+      );
+    }
+    if (geocodeWarning) weatherWarnings.push(geocodeWarning);
+
     // ── TODO (Phase C): Run crop-specific risk engine ────────────────────────
     // ── TODO (Phase D): Call Gemini for advisory text ────────────────────────
     // ── TODO (Phase E): Persist advisory to Supabase DB ─────────────────────
 
-    // Phase A scaffold — return 501 until Phases B–E are implemented.
+    // Phase B partial response — weather is real, risks + advisory coming in C–E.
     return new Response(
       JSON.stringify({
-        status: 'not_implemented',
-        message:
-          'Backend scaffold is in place. Weather, risk engine, and Gemini integration will be added in Phases B–E.',
-        received_input: {
-          location: farmerInput.location,
+        status: 'partial',
+        phase: 'B_weather_only',
+        note: 'Risk engine (Phase C) and AI advisory (Phase D) not yet integrated.',
+        farmer_input: {
+          location: resolvedLocationName,
+          latitude: resolvedLat,
+          longitude: resolvedLon,
           crop: farmerInput.crop,
           growth_stage: farmerInput.growth_stage,
           language: farmerInput.language,
         },
+        weather_summary: weatherSummary,
+        weather_warnings: weatherWarnings,
+        generated_at: new Date().toISOString(),
       }),
       {
-        status: 501,
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       },
     );
