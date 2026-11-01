@@ -8,7 +8,7 @@
 - Supabase Edge Function: `crop-advisory`
 - Path: `/functions/v1/crop-advisory`
 - Content-Type: `application/json`
-- Authentication: send `Authorization: Bearer sb_publishable_hC4rU26wCl5UfH7x2cWyuw_4LFNvCWs` and `apikey: sb_publishable_hC4rU26wCl5UfH7x2cWyuw_4LFNvCWs` (the Supabase anon/publishable key).
+- Authentication: send `Authorization: Bearer <anon key>` and `apikey: <anon key>` (the Supabase anon/publishable key).
 - A missing or invalid key is rejected by the Supabase gateway with HTTP 401 and a body of the form `{"code": "...", "message": "..."}`. This is not the error shape in section 5, so the frontend must handle it separately.
 - Forecast window: 7 days
 - Weather provider: Open-Meteo
