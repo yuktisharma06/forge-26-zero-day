@@ -1,0 +1,161 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 3770 >>
+stream
+BT /F2 18 Tf 60 710 Td (KisanRakshak Frontend - Work Summary) Tj ET
+BT /F1 10 Tf 60 695 Td (Prepared for: Team Leader) Tj ET
+BT /F1 10 Tf 60 680 Td (Date: 1 November 2026) Tj ET
+BT /F1 10 Tf 60 665 Td (Project: KisanRakshak, a Hindi-first web app for sugarcane and wheat farmers in Saharanpur) Tj ET
+BT /F1 10 Tf 60 650 Td (district.) Tj ET
+BT /F2 13 Tf 60 618 Td (1. Purpose) Tj ET
+BT /F1 10 Tf 60 600 Td (This document summarises the frontend work completed so far, the order in which it was done,) Tj ET
+BT /F1 10 Tf 60 585 Td (the current status, and what is still needed from the backend developer and the team.) Tj ET
+BT /F2 13 Tf 60 563 Td (2. Starting point) Tj ET
+BT /F1 10 Tf 74 545 Td (- The app screens already existed: home, farmer details \(crop, growth stage, location,) Tj ET
+BT /F1 10 Tf 74 530 Td (  sowing date\), dashboard \(risks, AI explanation, weather, crop information\), a speaker) Tj ET
+BT /F1 10 Tf 74 515 Td (  button, and Hindi/English switching.) Tj ET
+BT /F1 10 Tf 74 500 Td (- The app used demo data only. It was not connected to any backend.) Tj ET
+BT /F1 10 Tf 74 485 Td (- The agreed design: a Supabase Edge Function named crop-advisory at /functions/v1/crop-) Tj ET
+BT /F1 10 Tf 74 470 Td (  advisory. The frontend sends location, crop, sowing date \(optional\), growth stage and) Tj ET
+BT /F1 10 Tf 74 455 Td (  language. The backend returns weather, rule-based risks with severity, and an advisory.) Tj ET
+BT /F2 13 Tf 60 433 Td (3. Work log \(in order\)) Tj ET
+BT /F2 11 Tf 60 414 Td (Step 1 - API integration structure) Tj ET
+BT /F1 10 Tf 74 396 Td (- Added src/types/cropAdvisory.ts with request, success, failure and error-code types) Tj ET
+BT /F1 10 Tf 74 381 Td (  following the contract.) Tj ET
+BT /F1 10 Tf 74 366 Td (- Added src/services/advisoryContract.ts to build the request, check responses, and) Tj ET
+BT /F1 10 Tf 74 351 Td (  convert them to the dashboard's data shape.) Tj ET
+BT /F1 10 Tf 74 336 Td (- Added src/services/mockAdvisoryService.ts so demo data is kept separate from live data.) Tj ET
+BT /F1 10 Tf 74 321 Td (- Rewrote src/services/advisoryService.ts. fetchAdvisory\(\) is the single entry point used) Tj ET
+BT /F1 10 Tf 74 306 Td (  by screens.) Tj ET
+BT /F1 10 Tf 74 291 Td (- Demo mode is the default. Setting VITE_USE_MOCK_ADVISORY to false selects live mode,) Tj ET
+BT /F1 10 Tf 74 276 Td (  which needs VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.) Tj ET
+BT /F1 10 Tf 74 261 Td (- Updated the advisory hook \(errors now carry a code\), the shared types, the risk section) Tj ET
+BT /F1 10 Tf 74 246 Td (  \(insufficient data and no-risk shown separately\), the copy file and the dashboard page.) Tj ET
+BT /F1 10 Tf 74 231 Td (- Fixed two type errors. Typecheck and production build passed.) Tj ET
+BT /F2 11 Tf 60 215 Td (Step 2 - Zip export request) Tj ET
+BT /F1 10 Tf 74 197 Td (- A project zip was created to share the code. It could not be downloaded from the) Tj ET
+BT /F1 10 Tf 74 182 Td (  project, so the file was removed.) Tj ET
+BT /F1 10 Tf 74 167 Td (- Working method: click the project title \(top left\) and choose Download.) Tj ET
+BT /F2 11 Tf 60 151 Td (Step 3 - Final integration checklist \(six tasks\)) Tj ET
+BT /F1 10 Tf 74 133 Td (- Live API: real endpoint, base URL and anon key from environment variables, no silent) Tj ET
+BT /F1 10 Tf 74 118 Td (  fallback to demo data, 20-second timeout.) Tj ET
+BT /F1 10 Tf 74 103 Td (- HTTP mapping: 400 = invalid input, 404 = location not found, other failures = server) Tj ET
+BT /F1 10 Tf 74 88 Td (  error. Fixed a bug where a structured error body was read twice.) Tj ET
+BT /F1 10 Tf 74 73 Td (- Demo notice: shown only in demo mode. Weather source shown when the backend provides it.) Tj ET
+BT /F1 8 Tf 60 30 Td (Page 1 of 3) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 8 0 R >>
+endobj
+8 0 obj
+<< /Length 4021 >>
+stream
+BT /F1 10 Tf 74 722 Td (- Rain probability: mapped the field precipitationProbabilityPct \(camelCase, to match the) Tj ET
+BT /F1 10 Tf 74 707 Td (  contract style\) to the existing rain field. Shows 'not available' only when the value is) Tj ET
+BT /F1 10 Tf 74 692 Td (  missing or null. One demo day has no value to test this.) Tj ET
+BT /F1 10 Tf 74 677 Td (- Fallback explanation: the explanation is shown whenever the backend provides it, even) Tj ET
+BT /F1 10 Tf 74 662 Td (  when the AI step failed. It is labelled 'Rule-based fallback' \(Hindi and English\). The) Tj ET
+BT /F1 10 Tf 74 647 Td (  frontend does not generate any advice.) Tj ET
+BT /F1 10 Tf 74 632 Td (- Optional sowing date: the field is optional in the input flow and left out of the) Tj ET
+BT /F1 10 Tf 74 617 Td (  request when empty. Crop info shows 'Not provided' when empty.) Tj ET
+BT /F1 10 Tf 74 602 Td (- Language: changing language sends a new request in the chosen language with a loading) Tj ET
+BT /F1 10 Tf 74 587 Td (  state. Crop, location, stage and date are kept.) Tj ET
+BT /F1 10 Tf 74 572 Td (- Refresh button is disabled while loading. A new request cancels the earlier one, so old) Tj ET
+BT /F1 10 Tf 74 557 Td (  results are ignored.) Tj ET
+BT /F1 10 Tf 74 542 Td (- Error states: separate Hindi and English messages for invalid input, location not found,) Tj ET
+BT /F1 10 Tf 74 527 Td (  server error, timeout, network failure, and malformed response. Each has a retry button.) Tj ET
+BT /F1 10 Tf 74 512 Td (- Typecheck and production build passed.) Tj ET
+BT /F2 11 Tf 60 496 Td (Step 4 - This summary) Tj ET
+BT /F1 10 Tf 74 478 Td (- Prepared as a PDF for the team leader.) Tj ET
+BT /F2 13 Tf 60 456 Td (4. Current status) Tj ET
+BT /F1 10 Tf 74 438 Td (- Frontend integration code is complete and type-checked, and the production build passes.) Tj ET
+BT /F1 10 Tf 74 423 Td (- Live backend: NOT tested. No working endpoint exists yet.) Tj ET
+BT /F1 10 Tf 74 408 Td (- Mobile layout: NOT visually checked. No browser is available in this environment.) Tj ET
+BT /F1 10 Tf 74 393 Td (- Demo data is still the default. The fallback label only appears in live mode.) Tj ET
+BT /F1 10 Tf 74 378 Td (- Hindi messages written during this work need review by a native speaker.) Tj ET
+BT /F2 13 Tf 60 356 Td (5. Files changed or added \(this phase\)) Tj ET
+BT /F1 10 Tf 74 338 Td (- Added: src/types/cropAdvisory.ts, src/services/mockAdvisoryService.ts.) Tj ET
+BT /F1 10 Tf 74 323 Td (- Rewritten or heavily updated: src/services/advisoryContract.ts,) Tj ET
+BT /F1 10 Tf 74 308 Td (  src/services/advisoryService.ts, src/pages/DashboardPage.tsx, src/i18n/copy.ts.) Tj ET
+BT /F1 10 Tf 74 293 Td (- Updated: src/hooks/useAdvisory.ts, src/types/farm.ts,) Tj ET
+BT /F1 10 Tf 74 278 Td (  src/components/dashboard/RiskSection.tsx, src/components/dashboard/WeatherPanel.tsx,) Tj ET
+BT /F1 10 Tf 74 263 Td (  src/components/dashboard/AiExplanationCard.tsx,) Tj ET
+BT /F1 10 Tf 74 248 Td (  src/components/dashboard/CropInfoCard.tsx, src/components/input/SowingDateStep.tsx,) Tj ET
+BT /F1 10 Tf 74 233 Td (  src/utils/farmerInputValidation.ts, src/data/mockWeather.ts.) Tj ET
+BT /F1 10 Tf 74 218 Td (- Removed: the temporary project zip file.) Tj ET
+BT /F2 13 Tf 60 196 Td (6. Decisions and assumptions) Tj ET
+BT /F1 10 Tf 74 178 Td (- Demo data is the default until the backend is ready.) Tj ET
+BT /F1 10 Tf 74 163 Td (- The browser never holds secret keys. Only the public anon key is used.) Tj ET
+BT /F1 10 Tf 74 148 Td (- Only backend-returned severity is shown. The frontend does not calculate risk.) Tj ET
+BT /F1 10 Tf 74 133 Td (- Backend text is shown in the language that was requested. The frontend does not) Tj ET
+BT /F1 10 Tf 74 118 Td (  translate it.) Tj ET
+BT /F1 10 Tf 74 103 Td (- Field name for rain probability chosen as precipitationProbabilityPct; the contract does) Tj ET
+BT /F1 10 Tf 74 88 Td (  not yet define it.) Tj ET
+BT /F2 13 Tf 60 66 Td (7. Items needing confirmation) Tj ET
+BT /F1 8 Tf 60 30 Td (Page 2 of 3) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 10 0 R >>
+endobj
+10 0 obj
+<< /Length 1866 >>
+stream
+BT /F1 10 Tf 74 722 Td (- Rain probability field: add it to the contract and confirm the name.) Tj ET
+BT /F1 10 Tf 74 707 Td (- Fallback explanation: confirm that the advisory summary carries the rule-based text when) Tj ET
+BT /F1 10 Tf 74 692 Td (  AI fails.) Tj ET
+BT /F1 10 Tf 74 677 Td (- Sowing date: mark as optional in the contract.) Tj ET
+BT /F1 10 Tf 74 662 Td (- Weather source: the contract already defines weather.source \(example value Open-Meteo\).) Tj ET
+BT /F1 10 Tf 74 647 Td (  Confirm the backend always fills it.) Tj ET
+BT /F1 10 Tf 74 632 Td (- Growth-stage codes: the app sends IDs such as crown_root. The contract example uses) Tj ET
+BT /F1 10 Tf 74 617 Td (  codes such as CRI. The team must agree on one set.) Tj ET
+BT /F1 10 Tf 74 602 Td (- Sowing-date consistency warning: this was in the brief but does not exist in the app.) Tj ET
+BT /F1 10 Tf 74 587 Td (  Not built. Needs a decision on whether it is wanted.) Tj ET
+BT /F1 10 Tf 74 572 Td (- Error handling: confirm the error codes and messages agreed in the contract.) Tj ET
+BT /F1 10 Tf 74 557 Td (- Language re-request: the app re-requests on every language change. Confirm the backend) Tj ET
+BT /F1 10 Tf 74 542 Td (  supports this.) Tj ET
+BT /F1 10 Tf 74 527 Td (- Project name in README still shows a placeholder title; awaiting approval to change it) Tj ET
+BT /F1 10 Tf 74 512 Td (  to KisanRakshak.) Tj ET
+BT /F1 10 Tf 74 497 Td (- Who validates the crop risk thresholds \(only the IMD wheat rule is marked as validated\).) Tj ET
+BT /F2 13 Tf 60 475 Td (8. Verification results) Tj ET
+BT /F1 10 Tf 74 457 Td (- npm run typecheck: passed.) Tj ET
+BT /F1 10 Tf 74 442 Td (- npm run build: passed.) Tj ET
+BT /F1 10 Tf 74 427 Td (- Live endpoint test: not performed.) Tj ET
+BT /F1 10 Tf 74 412 Td (- Mobile layout check: not performed.) Tj ET
+BT /F1 8 Tf 60 30 Td (Page 3 of 3) Tj ET
+endstream
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000127 00000 n 
+0000000224 00000 n 
+0000000326 00000 n 
+0000000462 00000 n 
+0000004284 00000 n 
+0000004420 00000 n 
+0000008493 00000 n 
+0000008630 00000 n 
+trailer
+<< /Size 11 /Root 1 0 R >>
+startxref
+10549
+%%EOF
