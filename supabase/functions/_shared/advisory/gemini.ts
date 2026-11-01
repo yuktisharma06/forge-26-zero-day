@@ -7,9 +7,16 @@
 // Safety layers:
 //   1. The prompt forbids new thresholds, products, doses and chemicals.
 //   2. The answer must be valid JSON in a fixed shape.
-//   3. Any dose-like number (e.g. "5 ml", "2%") that does not already appear in
-//      the approved rule text is rejected, and the caller falls back to the
-//      deterministic text.
+//   3. Output checks (any failure rejects the whole answer and the caller uses the
+//      deterministic text instead):
+//        - language: Hindi answers must be in Devanagari, English answers must not
+//        - numbers: every number must already appear in the facts sent to Gemini
+//          (blocks invented temperatures, rainfall amounts, thresholds, percentages)
+//        - doses: dose-like numbers ("5 ml", "2%") not in the approved text are rejected
+//        - per-area rates ("per acre", "प्रति एकड़") are always rejected
+//        - chemical / pesticide / fertiliser / spray terms are always rejected
+//   4. One retry for temporary Google errors (429, 5xx, network). Timeouts are not retried.
+//   5. The location name is NOT sent to Gemini (it does not need it).
 //
 // The API key is read by the caller from Deno.env and passed in. It is never
 // logged and never returned in a response.
@@ -65,11 +72,16 @@ export interface ExplainArgs {
   language: Language;
   cropLabel: string;
   stageLabel: string;
-  locationName: string;
+  /** Kept for callers; deliberately NOT sent to Gemini. */
+  locationName?: string;
   risks: GeminiRiskInput[];
   /** Informational weather warnings (may be empty). */
   warnings?: GeminiWarningInput[];
   timeoutMs?: number;
+  /** Test hooks. */
+  fetchImpl?: typeof fetch;
+  /** Pause before the single retry (ms). Default 1500. */
+  retryDelayMs?: number;
 }
 
 const SYSTEM_PROMPT = `You write short, simple advisory text for small farmers in Uttar Pradesh, India.
@@ -102,43 +114,28 @@ export async function explainRisks(args: ExplainArgs): Promise<ExplainResult> {
     language: args.language,
     crop: args.cropLabel,
     growth_stage: args.stageLabel,
-    location: args.locationName,
     risks: args.risks,
     weather_warnings: warnings,
   });
 
-  const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(args.model)}:generateContent`;
+  const requestBody = JSON.stringify({
+    systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents: [{ role: 'user', parts: [{ text: userPayload }] }],
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: 2048,
+      responseMimeType: 'application/json',
+    },
+  });
 
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': args.apiKey,
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [{ role: 'user', parts: [{ text: userPayload }] }],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 2048,
-          responseMimeType: 'application/json',
-        },
-      }),
-      signal: AbortSignal.timeout(args.timeoutMs ?? 12_000),
-    });
-  } catch (err) {
-    // Do not log the request (it holds the key header). Log only the error name.
-    console.warn('[gemini] request failed:', err instanceof Error ? err.name : 'unknown');
-    return { ok: false, reason: 'AI_NETWORK_ERROR' };
+  const call = () => callOnce(args, requestBody);
+  let attempt = await call();
+  if (!attempt.ok && attempt.retryable) {
+    await new Promise((r) => setTimeout(r, args.retryDelayMs ?? RETRY_DELAY_MS));
+    attempt = await call();
   }
-
-  if (!response.ok) {
-    console.warn('[gemini] HTTP', response.status);
-    return { ok: false, reason: `AI_HTTP_${response.status}` };
-  }
+  if (!attempt.ok) return { ok: false, reason: attempt.reason };
+  const response = attempt.response;
 
   let text: string | undefined;
   try {
@@ -159,10 +156,47 @@ export async function explainRisks(args: ExplainArgs): Promise<ExplainResult> {
     text,
     args.risks.map((r) => r.rule_id),
     approvedPool,
+    { language: args.language, facts: userPayload },
   );
   return parsed
     ? { ok: true, explanation: parsed }
     : { ok: false, reason: 'AI_REJECTED_OUTPUT' };
+}
+
+// -----------------------------------------------------------------------------
+// HTTP call with one retry for temporary errors
+// -----------------------------------------------------------------------------
+
+const RETRY_DELAY_MS = 1_500;
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
+type Attempt =
+  | { ok: true; response: Response }
+  | { ok: false; reason: string; retryable: boolean };
+
+async function callOnce(args: ExplainArgs, body: string): Promise<Attempt> {
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(args.model)}:generateContent`;
+  let response: Response;
+  try {
+    response = await (args.fetchImpl ?? fetch)(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': args.apiKey as string },
+      body,
+      signal: AbortSignal.timeout(args.timeoutMs ?? 12_000),
+    });
+  } catch (err) {
+    // Do not log the request (it holds the key header). Log only the error name.
+    const name = err instanceof Error ? err.name : 'unknown';
+    console.warn('[gemini] request failed:', name);
+    const timedOut = name === 'TimeoutError' || name === 'AbortError';
+    return { ok: false, reason: 'AI_NETWORK_ERROR', retryable: !timedOut };
+  }
+  if (!response.ok) {
+    console.warn('[gemini] HTTP', response.status);
+    return { ok: false, reason: `AI_HTTP_${response.status}`, retryable: RETRYABLE_STATUS.has(response.status) };
+  }
+  return { ok: true, response };
 }
 
 // -----------------------------------------------------------------------------
@@ -185,10 +219,42 @@ export function containsUnapprovedDose(text: string, approvedPool: string): bool
   return matches.some((m) => !pool.includes(squash(m)));
 }
 
+// ── Extra output checks ──────────────────────────────────────────────────────
+const DEVANAGARI = /[\u0900-\u097F]/;
+const NOT_DEV_AFTER = '(?![\\u0900-\\u097F])';
+
+/** Devanagari digits (०-९) -> ASCII so number checks see them. */
+function normalizeDigits(s: string): string {
+  return s.replace(/[\u0966-\u096F]/g, (d) => String(d.charCodeAt(0) - 0x0966));
+}
+function extractNumbers(s: string): number[] {
+  return (normalizeDigits(s).match(/\d+(?:\.\d+)?/g) ?? []).map((m) => parseFloat(m));
+}
+
+const PER_AREA_EN =
+  /\bper\s+(?:acre|acres|ha|hectare|hectares|bigha|litre|liter|pump|tank)\b|\/\s*(?:acre|ha|hectare|bigha|l|litre|liter)\b/i;
+const PER_AREA_HI = new RegExp(`प्रति\\s*(?:एकड़|हेक्टेयर|बीघा|लीटर|पंप|टैंक)${NOT_DEV_AFTER}`);
+
+const CHEMICAL_EN =
+  /\b(?:pesticides?|insecticides?|fungicides?|herbicides?|weedicides?|chemicals?|fertili[sz]ers?|sprays?|spraying|urea|potash|npk|dap|kno3|kcl|kaolin|antitranspirants?|mancozeb|chlorpyrifos|imidacloprid)\b/i;
+const HI_TERMS = [
+  'कीटनाशक', 'फफूंदनाशक', 'फफूंदीनाशक', 'खरपतवारनाशक', 'रसायन', 'उर्वरक',
+  'खाद', 'यूरिया', 'पोटाश', 'छिड़काव', 'स्प्रे', 'दवा', 'दवाई', 'दवाइयां', 'दवाएं',
+];
+const CHEMICAL_HI = new RegExp(`(?<![\\u0900-\\u097F])(?:${HI_TERMS.join('|')})${NOT_DEV_AFTER}`);
+
+export interface ParseOptions {
+  /** When given, the answer must be in this language. */
+  language?: Language;
+  /** The exact facts sent to Gemini. When given, every number in the answer must appear in it. */
+  facts?: string;
+}
+
 export function parseGeminiExplanation(
   raw: string,
   knownRuleIds: string[],
   approvedPool: string,
+  options: ParseOptions = {},
 ): GeminiExplanation | null {
   let obj: unknown;
   try {
@@ -222,6 +288,26 @@ export function parseGeminiExplanation(
 
   const everything = [o.summary, ...risks.map((r) => `${r.title} ${r.reason}`), ...actions].join(' ');
   if (containsUnapprovedDose(everything, approvedPool)) return null;
+
+  const normalized = normalizeDigits(everything);
+  if (PER_AREA_EN.test(normalized) || PER_AREA_HI.test(normalized)) return null;
+  if (CHEMICAL_EN.test(everything) || CHEMICAL_HI.test(everything)) return null;
+
+  // Language: Hindi answers must be in Devanagari; English answers must contain none.
+  if (options.language === 'hi') {
+    const mustBeHindi = [o.summary, ...risks.map((r) => r.reason), ...actions];
+    if (!mustBeHindi.every((t) => DEVANAGARI.test(t))) return null;
+  } else if (options.language === 'en' && DEVANAGARI.test(everything)) {
+    return null;
+  }
+
+  // Numbers: nothing may appear that was not in the facts or the approved text.
+  if (options.facts !== undefined) {
+    const allowed = new Set([...extractNumbers(options.facts), ...extractNumbers(approvedPool)]);
+    for (const n of extractNumbers(everything)) {
+      if (!allowed.has(n)) return null;
+    }
+  }
 
   return { summary: o.summary.trim(), risks, actions };
 }

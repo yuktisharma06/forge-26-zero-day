@@ -4,7 +4,7 @@
 
 import { handleRequest, type Deps } from './handler.ts';
 import type { DailyForecast, WeatherSummary } from '../_shared/types.ts';
-import { containsUnapprovedDose, parseGeminiExplanation } from '../_shared/advisory/gemini.ts';
+import { containsUnapprovedDose, explainRisks, parseGeminiExplanation, type ExplainArgs } from '../_shared/advisory/gemini.ts';
 
 function assertEq<T>(actual: T, expected: T, msg: string) {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
@@ -315,7 +315,7 @@ Deno.test('not-assessed list is limited to what is relevant to the crop and stag
   const w = await call({ ...base, crop: 'wheat', growthStage: 'early_growth' }, makeDeps());
   assertEq(ids(w.json.notAssessedRisks), ['water_stress', 'waterlogging', 'wheat_frost_damage', 'crop_disease'], 'wheat early growth');
   const s = await call({ ...base, crop: 'sugarcane', growthStage: 'germination' }, makeDeps());
-  assertEq(ids(s.json.notAssessedRisks), ['water_stress', 'waterlogging', 'sugarcane_frost_damage', 'sugarcane_heat_damage', 'crop_disease'], 'sugarcane germination');
+  assertEq(ids(s.json.notAssessedRisks), ['water_stress', 'waterlogging', 'sugarcane_frost_damage', 'crop_disease'], 'sugarcane germination');
   for (const n of [...w.json.notAssessedRisks, ...s.json.notAssessedRisks]) {
     assertTrue(typeof n.id === 'string' && typeof n.name === 'string' && typeof n.reason === 'string' && typeof n.explanation === 'string', 'object shape');
   }
@@ -370,29 +370,117 @@ Deno.test('Gemini output with unknown rule id or bad JSON is rejected', () => {
   assertTrue(parseGeminiExplanation(none, [], '') !== null, 'empty risks accepted');
 });
 
-Deno.test('sugarcane_heat_damage is listed as not assessed at every sugarcane stage, and never for wheat', async () => {
-  for (const stage of ['germination', 'tillering', 'grand_growth', 'maturity_ripening']) {
-    const r = await call({ ...base, crop: 'sugarcane', growthStage: stage }, makeDeps());
-    const item = r.json.notAssessedRisks.find((x: { id: string }) => x.id === 'sugarcane_heat_damage');
-    assertTrue(item !== undefined, `sugarcane_heat_damage missing at ${stage}`);
-    assertEq(item.reason, 'no_validated_threshold', `reason at ${stage}`);
-  }
-  for (const stage of ['early_growth', 'crown_root', 'vegetative_growth', 'reproductive', 'grain_development_maturity']) {
-    const r = await call({ ...base, crop: 'wheat', growthStage: stage }, makeDeps());
-    assertTrue(!ids(r.json.notAssessedRisks).includes('sugarcane_heat_damage'), `wheat must not list sugarcane heat (${stage})`);
-  }
-});
-
-Deno.test('sugarcane heat warning and the heat-damage not-assessed item appear together', async () => {
-  const r = await call({ ...base, crop: 'sugarcane', growthStage: 'maturity_ripening' }, makeDeps({ rows: allDays({ max: 39 }) }));
-  assertTrue(r.json.weatherWarnings.length > 0, 'informational heat warning present');
-  assertEq(r.json.risks, [], 'still no crop risk');
-  assertTrue(ids(r.json.notAssessedRisks).includes('sugarcane_heat_damage'), 'heat damage listed as not assessed');
-});
-
-Deno.test('weather block uses dataQualityNotes and no longer has weather.warnings', async () => {
+Deno.test('weather.warnings holds data-quality notes only and is separate from weatherWarnings', async () => {
   const r = await call({ ...base, crop: 'wheat', growthStage: 'early_growth' }, makeDeps());
-  assertTrue(Array.isArray(r.json.weather.dataQualityNotes), 'dataQualityNotes is an array');
-  assertTrue(!('warnings' in r.json.weather), 'old weather.warnings key must be gone');
-  assertTrue(Array.isArray(r.json.weatherWarnings), 'top-level weatherWarnings still exists');
+  assertTrue(Array.isArray(r.json.weather.warnings), 'weather.warnings is an array (contract field)');
+  assertTrue(!('dataQualityNotes' in r.json.weather), 'no renamed key');
+  assertTrue(Array.isArray(r.json.weatherWarnings), 'top-level weatherWarnings exists');
+  const heavy = await call({ ...base, crop: 'wheat', growthStage: 'early_growth' }, makeDeps({ rows: withDays({ 2: { rain: 130 } }) }));
+  assertEq(heavy.json.weather.warnings, [], 'a weather alert is not copied into weather.warnings');
+  assertEq(heavy.json.weatherWarnings.length, 1, 'the alert is only in weatherWarnings');
+});
+
+// ── Gemini output guards (Phase D rules, enforced in code and not only in the prompt) ──
+const FACTS = JSON.stringify({ weather_warnings: [{ peak_value: 36, unit: '°C', dates: ['2026-11-04'] }] });
+const POOL = 'Monitor the crop and local weather advisories. 36 °C 2026-11-04';
+const answer = (summary: string, actions: string[] = ['Monitor the crop and local weather advisories.']) =>
+  JSON.stringify({ summary, risks: [], actions });
+const parseEn = (raw: string) => parseGeminiExplanation(raw, [], POOL, { language: 'en', facts: FACTS });
+const parseHi = (raw: string) => parseGeminiExplanation(raw, [], POOL, { language: 'hi', facts: FACTS });
+
+Deno.test('Gemini guard: a clean English answer using only known numbers is accepted', () => {
+  assertTrue(parseEn(answer('Hot afternoons around 36 °C are forecast on 2026-11-04. Keep watching the crop.')) !== null, 'accepted');
+});
+
+Deno.test('Gemini guard: language must match the request', () => {
+  assertEq(parseEn(answer('गर्मी का पूर्वानुमान है।', ['फसल पर नजर रखें।'])), null, 'Hindi text for an English request rejected');
+  assertEq(parseHi(answer('Hot days are forecast.', ['Monitor the crop.'])), null, 'English text for a Hindi request rejected');
+  assertTrue(parseHi(answer('दिन में 36 °C तक गर्मी का पूर्वानुमान है।', ['फसल और स्थानीय मौसम सलाह पर नजर रखें।'])) !== null, 'proper Hindi accepted');
+  assertEq(parseHi(answer('गर्मी का पूर्वानुमान है।', ['Monitor the crop.'])), null, 'one English action in a Hindi answer rejected');
+});
+
+Deno.test('Gemini guard: invented temperatures, rainfall and thresholds are rejected', () => {
+  assertEq(parseEn(answer('Temperatures may reach 41 °C.')), null, 'invented temperature');
+  assertEq(parseEn(answer('Damage starts above 30 degrees.')), null, 'invented threshold');
+  assertEq(parseEn(answer('About 120 mm of rain is expected.')), null, 'invented rainfall');
+  assertEq(parseHi(answer('गर्मी ४१ °C तक जा सकती है।', ['फसल पर नजर रखें।'])), null, 'Devanagari digits are checked too');
+  assertTrue(parseHi(answer('गर्मी ३६ °C तक जा सकती है।', ['फसल पर नजर रखें।'])) !== null, 'known number in Devanagari digits accepted');
+});
+
+Deno.test('Gemini guard: chemical, pesticide and fertiliser instructions are rejected', () => {
+  for (const t of ['Spray a pesticide on the crop.', 'Apply urea after the heat.', 'Use a fungicide.', 'Add fertiliser now.']) {
+    assertEq(parseEn(answer('Hot days are forecast.', [t])), null, t);
+  }
+  for (const t of ['कीटनाशक का प्रयोग करें।', 'फसल पर छिड़काव करें।', 'यूरिया डालें।', 'दवा डालें।']) {
+    assertEq(parseHi(answer('गर्मी का पूर्वानुमान है।', [t])), null, t);
+  }
+});
+
+Deno.test('Gemini guard: per-area rates are rejected', () => {
+  assertEq(parseEn(answer('Hot days are forecast.', ['Irrigate lightly per acre.'])), null, 'per acre');
+  assertEq(parseHi(answer('गर्मी का पूर्वानुमान है।', ['प्रति एकड़ सिंचाई करें।'])), null, 'प्रति एकड़');
+});
+
+// ── Gemini call: retry and privacy ──
+function geminiArgs(over: Partial<ExplainArgs>): ExplainArgs {
+  return {
+    apiKey: 'secret-key', model: 'm', language: 'en', cropLabel: 'wheat', stageLabel: 'grain development',
+    locationName: 'Saharanpur, Uttar Pradesh', risks: [], retryDelayMs: 0,
+    warnings: [{ id: 'wheat_grain_development_heat', name: 'High daytime temperature', dates: ['2026-11-04'], peak_value: 36, unit: '°C',
+      message: 'High daytime temperatures are forecast.', caveat: 'Indicative warning only.', approved_action: 'Monitor the crop and local weather advisories.' }],
+    ...over,
+  };
+}
+const okResponse = () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: answer('Hot afternoons around 36 °C are forecast.') }] } }] }), { status: 200 });
+
+Deno.test('Gemini call: one retry after a temporary 503, then success', async () => {
+  let calls = 0;
+  const fetchImpl = (() => { calls++; return Promise.resolve(calls === 1 ? new Response('x', { status: 503 }) : okResponse()); }) as typeof fetch;
+  const r = await explainRisks(geminiArgs({ fetchImpl }));
+  assertEq(r.ok, true, 'succeeded after retry');
+  assertEq(calls, 2, 'exactly two calls');
+});
+
+Deno.test('Gemini call: only one retry, then the reason code is returned', async () => {
+  let calls = 0;
+  const fetchImpl = (() => { calls++; return Promise.resolve(new Response('x', { status: 503 })); }) as typeof fetch;
+  const r = await explainRisks(geminiArgs({ fetchImpl }));
+  assertEq(r, { ok: false, reason: 'AI_HTTP_503' }, 'reason');
+  assertEq(calls, 2, 'no more than one retry');
+});
+
+Deno.test('Gemini call: 429 and network errors are retried; 400 and timeouts are not', async () => {
+  const count = async (make: () => Promise<Response>) => {
+    let calls = 0;
+    const fetchImpl = (() => { calls++; return make(); }) as typeof fetch;
+    await explainRisks(geminiArgs({ fetchImpl }));
+    return calls;
+  };
+  assertEq(await count(() => Promise.resolve(new Response('x', { status: 429 }))), 2, '429 retried');
+  assertEq(await count(() => Promise.reject(new TypeError('network'))), 2, 'network error retried');
+  assertEq(await count(() => Promise.resolve(new Response('x', { status: 400 }))), 1, '400 not retried');
+  assertEq(await count(() => Promise.reject(Object.assign(new Error('t'), { name: 'TimeoutError' }))), 1, 'timeout not retried');
+});
+
+Deno.test('Gemini call: the location name is not sent to Gemini', async () => {
+  let sent = '';
+  const fetchImpl = ((_u: string, init: RequestInit) => { sent = String(init.body); return Promise.resolve(okResponse()); }) as unknown as typeof fetch;
+  await explainRisks(geminiArgs({ fetchImpl }));
+  assertTrue(sent.length > 0, 'a request was made');
+  assertTrue(!sent.includes('Saharanpur'), 'location name not in the request');
+  assertTrue(!sent.includes('secret-key'), 'API key is not in the body');
+});
+
+Deno.test('Gemini call: an answer that breaks a guard becomes a fallback reason', async () => {
+  const bad = () => Promise.resolve(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: answer('Spray a pesticide today.') }] } }] }), { status: 200 }));
+  const r = await explainRisks(geminiArgs({ fetchImpl: bad as unknown as typeof fetch }));
+  assertEq(r, { ok: false, reason: 'AI_REJECTED_OUTPUT' }, 'rejected');
+});
+
+Deno.test('responses are sent as UTF-8 JSON (Hindi text displays correctly)', async () => {
+  const res = await handleRequest(
+    new Request('http://x', { method: 'POST', body: JSON.stringify({ ...base, language: 'hi', crop: 'wheat', growthStage: 'early_growth' }) }),
+    makeDeps(),
+  );
+  assertEq(res.headers.get('content-type'), 'application/json; charset=utf-8', 'content-type');
 });

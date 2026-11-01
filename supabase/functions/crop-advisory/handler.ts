@@ -133,7 +133,7 @@ function validate(body: Record<string, unknown>): { ok: true; input: ValidInput 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' },
   });
 }
 
@@ -193,7 +193,7 @@ export async function handleRequest(req: Request, deps: Deps = defaultDeps): Pro
     const weather = wr.weather;
     const isSample = wr.is_fallback;
 
-    const dataQualityNotes: string[] = [];
+    const weatherDataNotes: string[] = [];
     let weatherNote: string | null = null;
     let stale = false;
     if (isSample) {
@@ -201,10 +201,10 @@ export async function handleRequest(req: Request, deps: Deps = defaultDeps): Pro
         'Live weather could not be fetched. The figures shown are sample data for demonstration only and do NOT reflect real conditions.';
     } else {
       stale = isWeatherDataStale(weather);
-      if (stale) dataQualityNotes.push('Weather data appears out of date.');
+      if (stale) weatherDataNotes.push('Weather data appears out of date.');
       const missing = weatherDataCompletenessRatio(weather);
       if (missing > 0.3) {
-        dataQualityNotes.push(`${Math.round(missing * 100)}% of weather values are missing. Reliability may be reduced.`);
+        weatherDataNotes.push(`${Math.round(missing * 100)}% of weather values are missing. Reliability may be reduced.`);
       }
     }
 
@@ -259,7 +259,7 @@ export async function handleRequest(req: Request, deps: Deps = defaultDeps): Pro
       growthStage: stage,
       sowingDate,
       location: { name: locationName, latitude, longitude },
-      weather: toWeatherBlock(weather, isSample, dataQualityNotes, weatherNote),
+      weather: toWeatherBlock(weather, isSample, weatherDataNotes, weatherNote),
       notes,
       notAssessedRisks: notAssessed,
       generatedAt: new Date().toISOString(),

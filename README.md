@@ -1,263 +1,126 @@
 # KisanRakshak
 
-A weather-aware crop protection assistant for Indian farmers.
-KisanRakshak fetches real weather forecasts, detects crop-specific weather risks using verified agricultural rules, and generates actionable guidance in Hindi or English using Google Gemini.
+Weather-risk advisory for farmers, built for the Forge'26 hackathon. The pilot area is Saharanpur, Uttar Pradesh, and the supported crops are **wheat** and **sugarcane**.
 
-**Initial scope:** Sugarcane and wheat in Saharanpur, Uttar Pradesh.
+The backend is a single Supabase Edge Function, **`crop-advisory`**. It takes the farmer's location, crop and growth stage, fetches a 7-day Open-Meteo forecast, applies deterministic rules, and returns a structured, bilingual (English and Hindi) advisory. Gemini is used only to explain what the rules found.
 
----
+- Full request and response reference: [`docs/api-contract.md`](docs/api-contract.md)
+- Product specification: [`docs/specs.md`](docs/specs.md)
 
-## Project structure
+## How it works
 
-```
-forge-26-zero-day/
-├── docs/
-│   └── specs.md                    # Full application specification (source of truth)
-├── supabase/
-│   ├── config.toml                 # Local Supabase configuration
-│   ├── seed.sql                    # Demo seed data for local development
-│   ├── migrations/
-│   │   ├── 20241031000001_create_farmers.sql
-│   │   ├── 20241031000002_create_risk_rules.sql
-│   │   └── 20241031000003_create_advisories.sql
-│   └── functions/
-│       ├── generate-advisory/
-│       │   └── index.ts            # Main Edge Function endpoint (Phase A scaffold)
-│       └── _shared/
-│           ├── cors.ts             # Shared CORS headers
-│           ├── types.ts            # Shared TypeScript type definitions
-│           ├── weather/
-│           │   └── openmeteo.ts    # Open-Meteo weather integration (Phase B)
-│           └── risk-engine/
-│               ├── wheat-rules.ts      # Wheat risk rules (sourced from ICAR / IMD KALP)
-│               └── sugarcane-rules.ts  # Sugarcane risk rules (sourced from ICAR-IIFSR / IMD)
-└── .env.example                    # Environment variable template (no real secrets)
-```
+1. **Input check.** Validates the crop, growth stage, language and optional sowing date.
+2. **Location.** Uses `latitude` and `longitude` if supplied, otherwise looks up `location` with the Open-Meteo geocoder.
+3. **Weather.** Fetches the 7-day Open-Meteo forecast. If it cannot be fetched, the response carries clearly labelled sample data (`weather.dataStatus: "sample"`) and no assessment is made.
+4. **Deterministic checks**, kept separate in the response:
+   - `risks`: validated crop risks with Low, Moderate or High severity. No validated crop-risk rules are enabled at present, so this is always an empty array.
+   - `weatherWarnings`: informational weather alerts with no severity and no claim of crop damage. One object per triggered day.
+   - `notAssessedRisks`: conditions that cannot be assessed with the available data, limited to what is relevant to the selected crop and stage.
+5. **Explanation.** Gemini writes only `advisory.summary` and `advisory.actions`. Its output is validated, and anything that adds a risk or an unapproved dose-like figure is rejected. If Gemini is unavailable or rejected, the response uses rule-written text (`aiStatus: "fallback"`).
 
----
+An empty `risks` array never means the crop is safe. Always show `notAssessedRisks` with it.
 
-## Prerequisites
+## Calling the endpoint
 
-| Tool | Version | Notes |
-|------|---------|-------|
-| [Node.js](https://nodejs.org/) | 18+ | Required for Supabase CLI |
-| [Supabase CLI](https://supabase.com/docs/guides/cli) | Latest | `npm install -g supabase` |
-| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Latest | Required for local Supabase |
-| [Deno](https://deno.land/) | 1.40+ | Required to run Edge Functions locally |
+`POST /functions/v1/crop-advisory` with a JSON body. Field names are **camelCase**.
 
----
+| Field | Required | Values |
+|---|---|---|
+| `location` | Yes | Place name, 1 to 120 characters |
+| `crop` | Yes | `wheat` or `sugarcane` |
+| `growthStage` | Yes | Wheat: `early_growth`, `crown_root`, `vegetative_growth`, `reproductive`, `grain_development_maturity`. Sugarcane: `germination`, `tillering`, `grand_growth`, `maturity_ripening` |
+| `language` | No | `en` (default) or `hi` |
+| `sowingDate` | No | `YYYY-MM-DD` |
+| `latitude`, `longitude` | No | Send both, or neither |
 
-## Local development setup
+Send the canonical stage IDs above. The backend also tolerates `CRI` and the older snake_case names, but clients should not rely on that.
 
-### 1. Clone and branch
-
-```bash
-git clone <repo-url>
-cd forge-26-zero-day
-git checkout feature/backend
-```
-
-### 2. Configure environment variables
-
-```bash
-cp .env.example .env
-# Edit .env and fill in your values (see .env.example for descriptions)
-```
-
-### 3. Start local Supabase
-
-```bash
-supabase start
-```
-
-This starts a local PostgreSQL database, REST API, Edge Function runtime, and Supabase Studio.
-The local Studio UI is available at **http://127.0.0.1:54323**.
-
-### 4. Apply database migrations
-
-```bash
-supabase db reset
-```
-
-This applies all migrations in `supabase/migrations/` in order and runs `supabase/seed.sql`.
-
-### 5. Set Edge Function secrets (local)
-
-```bash
-supabase secrets set GEMINI_API_KEY=your_gemini_key_here
-```
-
-> **Security:** Never hard-code the Gemini API key in any source file. Always use Supabase secrets.
-> The Gemini key must never appear in frontend code or in the GitHub repository.
-
-### 6. Run Edge Functions locally
-
-```bash
-supabase functions serve generate-advisory --env-file .env
-```
-
-The function will be available at:
-`http://127.0.0.1:54321/functions/v1/generate-advisory`
-
----
-
-## API reference
-
-### `POST /functions/v1/generate-advisory`
-
-Accepts farmer details and returns a weather forecast, crop-specific risk assessment, and AI-generated advisory.
-
-**Request body:**
+Example:
 
 ```json
 {
-  "location": "Saharanpur, Uttar Pradesh",
-  "latitude": 29.9648,
-  "longitude": 77.5460,
+  "location": "Saharanpur",
   "crop": "wheat",
-  "growth_stage": "grain_development_maturity",
-  "sowing_date": "2025-11-15",
+  "growthStage": "early_growth",
   "language": "en"
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `location` | string | ✅ | Human-readable location name |
-| `latitude` | number | ✅ | Latitude in decimal degrees |
-| `longitude` | number | ✅ | Longitude in decimal degrees |
-| `crop` | `"wheat"` \| `"sugarcane"` | ✅ | Selected crop |
-| `growth_stage` | string | ✅ | Manually selected growth stage (see values below) |
-| `sowing_date` | string (ISO date) | ❌ | Used only for consistency checks; never overrides `growth_stage` |
-| `language` | `"en"` \| `"hi"` | ✅ | Preferred response language |
+Main response fields: `success`, `assessmentStatus` (`completed`, `no_significant_risk` or `insufficient_data`), `weather`, `risks`, `weatherWarnings`, `notAssessedRisks`, `advisory`, `aiStatus` (`completed`, `fallback` or `skipped`). Errors look like `{ "success": false, "error": { "code", "message" } }`. See the contract for everything else.
 
-**Valid `growth_stage` values:**
+## Running locally
 
-| Crop | Stage values |
-|------|-------------|
-| `wheat` | `early_growth`, `cri`, `vegetative_growth`, `reproductive`, `grain_development_maturity` |
-| `sugarcane` | `germination`, `tillering`, `grand_growth`, `maturity_ripening` |
+You need Docker Desktop, the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started), and a Gemini API key.
 
-**Response (Phase E — to be finalised with team):**
+1. Copy `.env.example` to `.env` and fill in your values. **Never commit `.env`.**
+2. Start the local stack from the repo root:
+   ```
+   supabase start
+   ```
+3. Serve the functions (keep this window open):
+   ```
+   supabase functions serve --env-file .env --no-verify-jwt
+   ```
+   `--no-verify-jwt` is for local testing only.
+4. Call it from a second window (Command Prompt, one line):
+   ```
+   curl -i -X POST http://127.0.0.1:54321/functions/v1/crop-advisory -H "Content-Type: application/json" -d "{\"location\":\"Saharanpur\",\"crop\":\"wheat\",\"growthStage\":\"early_growth\",\"language\":\"en\"}"
+   ```
 
-```json
-{
-  "farmer_input": { ... },
-  "weather_summary": {
-    "location": "Saharanpur, Uttar Pradesh",
-    "latitude": 29.9648,
-    "longitude": 77.5460,
-    "daily": [ ... ],
-    "fetched_at": "2025-12-01T10:00:00Z",
-    "source": "Open-Meteo"
-  },
-  "detected_risks": [
-    {
-      "rule_id": "wheat_grain_dev_terminal_heat_moderate",
-      "risk_name": "Terminal Heat Stress",
-      "severity": "Moderate",
-      "validation_status": "validated",
-      "weather_parameter": "max_temp_c",
-      "observed_value": 32.5,
-      "threshold_value": 30,
-      "threshold_operator": "gt",
-      "threshold_unit": "°C",
-      "trigger_date": "2025-12-03",
-      "source": "IMD KALP Operational Framework",
-      "source_url": "https://mausam.imd.gov.in/...",
-      "precautionary_action": "..."
-    }
-  ],
-  "ai_advisory": "...",
-  "ai_fallback": false,
-  "generated_at": "2025-12-01T10:00:05Z"
-}
+Run every `supabase` command from inside the repo folder.
+
+### Environment variables
+
+| Name | Purpose |
+|---|---|
+| `GEMINI_API_KEY` | Gemini key. Read by the function only, never sent to the frontend. If missing, the endpoint still works and returns rule-written text. |
+| `GEMINI_MODEL` | Optional. Overrides the default model name. |
+
+Supabase supplies its own `SUPABASE_*` values to deployed functions automatically.
+
+## Tests
+
+The tests use [Deno](https://deno.com/) and need no network: weather, geocoding and Gemini are replaced by stand-ins.
+
+```
+deno test --allow-env --allow-read supabase/functions/crop-advisory/handler_test.ts
+deno test --allow-env --allow-read supabase/functions/_shared/risk-engine/risk-engine.test.ts
 ```
 
-> **Note:** The exact response shape will be confirmed with the full team (frontend + backend) before Phase E integration. See `supabase/functions/_shared/types.ts` for the full TypeScript definitions.
+Expected: 31 passed for the handler suite and 14 passed for the risk-engine suite.
 
----
+## Deploying
 
-## Agricultural risk rules
+1. Link the Supabase project: `supabase link --project-ref <project-ref>`
+2. Set the secret on the project: `supabase secrets set GEMINI_API_KEY=<your-key>` (it is available immediately, no redeploy needed). Check with `supabase secrets list`.
+3. Deploy: `supabase functions deploy crop-advisory`
+4. Call it at `https://<project-ref>.supabase.co/functions/v1/crop-advisory` with an `apikey` header holding the project's publishable key.
 
-Risk rules are maintained in:
-- `supabase/functions/_shared/risk-engine/wheat-rules.ts`
-- `supabase/functions/_shared/risk-engine/sugarcane-rules.ts`
+Decide as a team whether `crop-advisory` should require a JWT before the public demo (`verify_jwt` in `supabase/config.toml`). The endpoint spends Gemini quota on every call.
 
-### Validation status
+## Project layout
 
-| Status | Behaviour | Use case |
-|--------|-----------|----------|
-| `validated` | Automated Low / Moderate / High severity | Operationally confirmed thresholds (e.g. IMD KALP) |
-| `research_observation` | Qualitative "Potential Risk" warning only | Thresholds from research; need local KVK validation |
-| `pending_validation` | Qualitative warning only | General guidance; awaiting ICAR / KVK confirmation |
-
-**Critical rules enforced by the risk engine:**
-- Only `validated` rules trigger automated severity classification.
-- Rainfall alone is never used to confirm actual field waterlogging.
-- No unsupported pesticide dosages or chemical treatment instructions are generated.
-- If a threshold cannot be verified, it is marked `pending_validation` and generates a qualitative warning only.
-
-### Sources
-
-- [ICAR-IIFSR Sugarcane Crop Management](https://dss.iifsr.org.in/sugarcane_management.php)
-- [IMD KALP Operational Framework](https://mausam.imd.gov.in/imd_latest/contents/agromet/kalp/kalp.pdf)
-- [IMD MAUSAM — Climatic Impacts on Wheat in UP](https://mausamjournal.imd.gov.in/index.php/MAUSAM/article/view/1179)
-- [IMD MAUSAM — Extreme Weather Impacts on Sugarcane in UP](https://mausamjournal.imd.gov.in/index.php/MAUSAM/article/view/1187)
-
----
-
-## Database schema
-
-| Table | Description |
-|-------|-------------|
-| `farmers` | Farmer profiles — location, crop, sowing date, growth stage, language |
-| `risk_rules` | Crop-specific weather risk rules with source attribution |
-| `advisories` | Persisted advisory records for history feature |
-
-Row Level Security (RLS) is enabled on all tables.
-
----
-
-## Deployment (Supabase hosted)
-
-```bash
-# Link to hosted Supabase project
-supabase link --project-ref <your-project-ref>
-
-# Push database migrations
-supabase db push
-
-# Set production secrets
-supabase secrets set GEMINI_API_KEY=your_production_key
-
-# Deploy Edge Functions
-supabase functions deploy generate-advisory
+```
+docs/                          API contract and product spec
+supabase/
+  config.toml
+  migrations/                  database schema
+  functions/
+    crop-advisory/             the endpoint (handler.ts) and its tests
+    _shared/
+      advisory/                response building, Gemini helper, fixed EN/HI text
+      risk-engine/             deterministic severity engine (no rules enabled)
+      weather-warnings/        informational IMD rainfall and heat alerts
+      not-assessed/            conditions listed as not assessed
+      weather/, geocoding/     Open-Meteo clients
 ```
 
----
+`generate-advisory`, `get-weather` and `_shared/gemini/` are older code. `crop-advisory` does not use them. Their tests fail by design, and the team has yet to decide whether to delete them.
 
-## Implementation status
+## Principles
 
-| Phase | Description | Status |
-|-------|-------------|--------|
-| A | Backend setup — repo, branch, Supabase structure, scaffolding | ✅ Complete |
-| B | Open-Meteo weather API integration | 🔜 Next |
-| C | Crop-specific risk detection engine | 🔜 Next |
-| D | Gemini advisory generation | 🔜 Next |
-| E | Combine components into single endpoint | 🔜 Next |
-| F | Testing and delivery | 🔜 Next |
-
----
-
-## Known limitations (Phase A)
-
-- The `generate-advisory` endpoint currently returns **HTTP 501 Not Implemented**. Weather, risk engine, and Gemini integration are not yet wired in.
-- Sugarcane risk rules are research-observation or pending-validation only at this stage; no automated severity classification is applied for sugarcane until thresholds are confirmed with ICAR/KVK.
-- The response schema may be updated after team alignment in Phase E.
-
----
-
-## Disclaimer
-
-KisanRakshak provides advisory support based on weather forecasts and verified agricultural guidelines. It does not replace expert agricultural consultation. Risk alerts indicate potential weather-related concerns based on forecast data — they do not confirm actual crop damage, field waterlogging, or disease occurrence.
+- Only the deterministic code decides what is flagged. Gemini explains and never decides.
+- No thresholds, doses or treatments are invented. Anything without a validated basis is listed as not assessed.
+- Rainfall alone never implies waterlogging.
+- Sample or stale weather is never assessed and never shown as live.
+- This is advisory support, not a replacement for a local agricultural expert or KVK.

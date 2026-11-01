@@ -95,16 +95,6 @@ const DEFS: Def[] = [
     applies: (c) => c === 'sugarcane',
   },
   {
-    id: 'sugarcane_heat_damage',
-    name: { en: 'Heat damage', hi: 'गर्मी से नुकसान' },
-    reason: 'no_validated_threshold',
-    explanation: {
-      en: 'No validated heat-damage threshold is available for sugarcane in the pilot region, so crop heat damage is not assessed. A separate informational heat warning may still appear.',
-      hi: 'पायलट क्षेत्र में गन्ने के लिए गर्मी से नुकसान की कोई सत्यापित सीमा उपलब्ध नहीं है, इसलिए फसल को गर्मी से नुकसान का आकलन नहीं किया जाता। अलग से सूचनात्मक गर्मी चेतावनी फिर भी आ सकती है।',
-    },
-    applies: (c) => c === 'sugarcane',
-  },
-  {
     id: 'crop_disease',
     name: { en: 'Crop disease', hi: 'फसल रोग' },
     reason: 'insufficient_evidence',
