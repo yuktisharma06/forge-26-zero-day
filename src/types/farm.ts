@@ -40,12 +40,12 @@ export interface FarmerInput {
 
 export interface DailyForecast {
   date: string;
-  tempMax: number;
-  tempMin: number;
-  precipitation: number;
+  tempMax: number | null;
+  tempMin: number | null;
+  precipitation: number | null;
   rainProbability: number | null;
-  humidity: number;
-  windSpeed: number;
+  humidity: number | null;
+  windSpeed: number | null;
 }
 
 export interface WeatherForecast {

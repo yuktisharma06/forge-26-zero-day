@@ -60,6 +60,10 @@ function hasValidRisks(value: unknown): boolean {
   );
 }
 
+function isNullableNumber(value: unknown): boolean {
+  return value === null || typeof value === 'number';
+}
+
 function hasValidWeather(value: unknown): boolean {
   return (
     isRecord(value) &&
@@ -69,11 +73,11 @@ function hasValidWeather(value: unknown): boolean {
       (day) =>
         isRecord(day) &&
         typeof day.date === 'string' &&
-        typeof day.temperatureMaxC === 'number' &&
-        typeof day.temperatureMinC === 'number' &&
-        typeof day.precipitationMm === 'number' &&
-        typeof day.humidityPercent === 'number' &&
-        typeof day.windSpeedKmh === 'number',
+        isNullableNumber(day.temperatureMaxC) &&
+        isNullableNumber(day.temperatureMinC) &&
+        isNullableNumber(day.precipitationMm) &&
+        isNullableNumber(day.humidityPercent) &&
+        isNullableNumber(day.windSpeedKmh),
     )
   );
 }

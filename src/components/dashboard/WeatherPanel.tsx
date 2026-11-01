@@ -22,6 +22,14 @@ function Metric({ icon, label, value }: { icon: ReactNode; label: string; value:
   );
 }
 
+function formatTemperature(max: number | null, min: number | null, unavailable: string): string {
+  return max === null || min === null ? unavailable : `${Math.round(max)}° / ${Math.round(min)}°`;
+}
+
+function formatWhole(value: number | null, suffix: string, unavailable: string): string {
+  return value === null ? unavailable : `${Math.round(value)}${suffix}`;
+}
+
 function DayCard({ day }: { day: DailyForecast }) {
   const { lang, t } = useLanguage();
   const rainy = day.rainProbability !== null && day.rainProbability >= 50;
@@ -35,7 +43,7 @@ function DayCard({ day }: { day: DailyForecast }) {
         <Thermometer className="h-7 w-7 text-warning-700" aria-hidden="true" />
       )}
       <span className="text-sm font-bold text-neutral-900">
-        {Math.round(day.tempMax)}° / {Math.round(day.tempMin)}°
+        {formatTemperature(day.tempMax, day.tempMin, t(copy.notAvailable))}
       </span>
       <span className="flex items-center gap-1 text-xs text-neutral-600">
         <Droplets className="h-3.5 w-3.5" aria-hidden="true" />
@@ -66,7 +74,7 @@ export default function WeatherPanel({ forecast }: WeatherPanelProps) {
           <Metric
             icon={<Thermometer className="h-3.5 w-3.5" aria-hidden="true" />}
             label={t(copy.temperature)}
-            value={`${Math.round(today.tempMax)}° / ${Math.round(today.tempMin)}°`}
+            value={formatTemperature(today.tempMax, today.tempMin, t(copy.notAvailable))}
           />
           <Metric
             icon={<CloudRain className="h-3.5 w-3.5" aria-hidden="true" />}
@@ -76,12 +84,12 @@ export default function WeatherPanel({ forecast }: WeatherPanelProps) {
           <Metric
             icon={<Droplets className="h-3.5 w-3.5" aria-hidden="true" />}
             label={t(copy.humidity)}
-            value={`${today.humidity}%`}
+            value={formatWhole(today.humidity, '%', t(copy.notAvailable))}
           />
           <Metric
             icon={<Wind className="h-3.5 w-3.5" aria-hidden="true" />}
             label={t(copy.wind)}
-            value={`${Math.round(today.windSpeed)} km/h`}
+            value={formatWhole(today.windSpeed, ' km/h', t(copy.notAvailable))}
           />
         </div>
       </div>

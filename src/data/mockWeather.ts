@@ -24,5 +24,5 @@ export function buildMockForecast(now: Date = new Date()): WeatherForecast {
     return { date: toLocalIsoDate(date), ...day };
   });
 
-  return { source: null, fetchedAt: now.toISOString(), daily };
+  return { source: 'Demo sample data', fetchedAt: now.toISOString(), daily };
 }

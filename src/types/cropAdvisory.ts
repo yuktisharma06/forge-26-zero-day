@@ -16,11 +16,11 @@ export interface CropAdvisoryLocation {
 
 export interface CropAdvisoryDailyForecast {
   date: string;
-  temperatureMaxC: number;
-  temperatureMinC: number;
-  precipitationMm: number;
-  humidityPercent: number;
-  windSpeedKmh: number;
+  temperatureMaxC: number | null;
+  temperatureMinC: number | null;
+  precipitationMm: number | null;
+  humidityPercent: number | null;
+  windSpeedKmh: number | null;
 }
 
 export interface CropAdvisoryWeather {
