@@ -141,19 +141,38 @@ export function toAdvisoryResponse(data: CropAdvisorySuccess): AdvisoryResponse 
         windSpeed: day.windSpeedKmh,
       })),
     },
-    risks: data.risks.map((risk, index) => ({
-      id: `${index}-${risk.name}`,
-      title: sameText(risk.name),
-      severity: risk.severity,
-      forecastPeriod: sameText(risk.forecastPeriod),
-      weatherCondition: sameText(risk.weatherCondition),
-      whyItMatters: sameText(risk.reason),
-      precautions: [],
-      sources: risk.source ? [{ name: risk.source.title, url: risk.source.url }] : [],
-    })),
-    insufficientData: data.assessmentStatus === 'insufficient_data' ? summary : null,
+   risks: data.risks.map((risk) => ({
+  id: risk.id,
+  title: sameText(risk.name),
+  severity: risk.severity,
+  forecastPeriod: sameText(risk.forecastPeriod),
+  weatherCondition: sameText(risk.weatherCondition),
+  whyItMatters: sameText(risk.reason),
+  precautions: risk.preventiveAction
+    ? [sameText(risk.preventiveAction)]
+    : [],
+  sources: risk.source?.url
+    ? [{ name: risk.source.title, url: risk.source.url }]
+    : [],
+})),
+
+insufficientData: data.insufficientReason
+      ? sameText(data.insufficientReason)
+      : null,
+
     aiSummary: summary,
-    aiFallback: summary !== null && data.aiStatus !== 'completed',
+    aiFallback:
+      data.aiStatus === 'fallback' || data.advisory.writtenBy === 'rules',
     actions: data.advisory.actions.map(sameText),
+
+    weatherWarnings: data.weatherWarnings,
+    notAssessedRisks: data.notAssessedRisks,
+    notes: data.notes,
+    generatedAt: data.generatedAt,
+    insufficientReason: data.insufficientReason,
+    aiStatus: data.aiStatus,
+    aiNote: data.aiNote,
+    advisoryWrittenBy: data.advisory.writtenBy,
+    advisoryDisclaimer: data.advisory.disclaimer,
   };
 }

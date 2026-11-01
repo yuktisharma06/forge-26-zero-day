@@ -1,3 +1,4 @@
+
 export type Language = 'hi' | 'en';
 
 export interface Bilingual {
@@ -52,6 +53,15 @@ export interface WeatherForecast {
   source: string | null;
   fetchedAt: string;
   daily: DailyForecast[];
+
+  // Backend weather information
+  dataStatus?: 'live' | 'sample';
+  timezone?: string;
+  forecastDays?: number;
+  startDate?: string;
+  endDate?: string;
+  dataQualityNotes?: string[];
+  note?: string | null;
 }
 
 export type RiskLevel = 'low' | 'moderate' | 'high';
@@ -70,9 +80,39 @@ export interface WeatherRisk {
   whyItMatters: Bilingual;
   precautions: Bilingual[];
   sources: RiskSource[];
+
+  // Additional backend risk information
+  triggeredDates?: string[];
+  peakValue?: number | null;
+  peakDate?: string | null;
+  severityBasis?: string;
+  caveats?: string[];
 }
 
-export type AssessmentStatus = 'completed' | 'no_significant_risk' | 'insufficient_data';
+export interface WeatherWarning {
+  id: string;
+  category: 'heat' | 'rainfall';
+  name: string;
+  crop: CropId;
+  growthStage: string;
+  date: string;
+  observedValue: number;
+  unit: string;
+  message: string;
+  caveat: string;
+}
+
+export interface NotAssessedRisk {
+  id: string;
+  name: string;
+  reason: string;
+  explanation: string;
+}
+
+export type AssessmentStatus =
+  | 'completed'
+  | 'no_significant_risk'
+  | 'insufficient_data';
 
 export interface AdvisoryResponse {
   assessmentStatus: AssessmentStatus;
@@ -82,4 +122,15 @@ export interface AdvisoryResponse {
   aiSummary: Bilingual | null;
   aiFallback: boolean;
   actions: Bilingual[];
+
+  // Additional backend response information
+  weatherWarnings?: WeatherWarning[];
+  notAssessedRisks?: NotAssessedRisk[];
+  notes?: string[];
+  generatedAt?: string;
+  insufficientReason?: string | null;
+  aiStatus?: 'completed' | 'fallback' | 'skipped';
+  aiNote?: string | null;
+  advisoryWrittenBy?: 'ai' | 'rules';
+  advisoryDisclaimer?: string;
 }
