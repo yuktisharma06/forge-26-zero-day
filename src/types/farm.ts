@@ -58,7 +58,7 @@ export type RiskLevel = 'low' | 'moderate' | 'high';
 
 export interface RiskSource {
   name: string;
-  url: string;
+  url: string | null;
 }
 
 export interface WeatherRisk {
