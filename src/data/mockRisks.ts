@@ -113,7 +113,7 @@ const SUGARCANE_STAGES: Record<string, StageAdvisoryFixture> = {
       en: 'A growing cane crop needs regular water. Watch soil moisture during dry days.',
     },
   },
-  maturity: {
+  maturity_ripening: {
     risks: [
       {
         id: 'sc-maturity-cold-stress',
@@ -182,7 +182,7 @@ const WHEAT_STAGES: Record<string, StageAdvisoryFixture> = {
       en: 'Cool nights can affect root development. Maintain soil moisture.',
     },
   },
-  vegetative: {
+  vegetative_growth: {
     risks: [
       {
         id: 'wh-vegetative-excess-rain',
@@ -237,7 +237,7 @@ const WHEAT_STAGES: Record<string, StageAdvisoryFixture> = {
       en: 'Heat during booting and flowering can stress the crop. Be ready to irrigate.',
     },
   },
-  grain_development: {
+  grain_development_maturity: {
     risks: [
       {
         id: 'wh-grain-heat',

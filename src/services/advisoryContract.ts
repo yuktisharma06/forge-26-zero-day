@@ -13,6 +13,9 @@ const KNOWN_ERROR_CODES: readonly string[] = [
   'INTERNAL_SERVER_ERROR',
 ];
 
+const ASSESSMENT_STATUSES: readonly string[] = ['completed', 'no_significant_risk', 'insufficient_data'];
+const RISK_SEVERITIES: readonly string[] = ['low', 'moderate', 'high'];
+
 export class AdvisoryRequestError extends Error {
   readonly code: AdvisoryErrorCode;
 
@@ -37,37 +40,79 @@ export function isFailureBody(raw: unknown): boolean {
   return typeof raw === 'object' && raw !== null && (raw as { success?: unknown }).success === false;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function hasValidRisks(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (risk) =>
+        isRecord(risk) &&
+        typeof risk.name === 'string' &&
+        typeof risk.severity === 'string' &&
+        RISK_SEVERITIES.includes(risk.severity) &&
+        typeof risk.weatherCondition === 'string' &&
+        typeof risk.forecastPeriod === 'string' &&
+        typeof risk.reason === 'string',
+    )
+  );
+}
+
+function hasValidWeather(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.fetchedAt === 'string' &&
+    Array.isArray(value.dailyForecast) &&
+    value.dailyForecast.every(
+      (day) =>
+        isRecord(day) &&
+        typeof day.date === 'string' &&
+        typeof day.temperatureMaxC === 'number' &&
+        typeof day.temperatureMinC === 'number' &&
+        typeof day.precipitationMm === 'number' &&
+        typeof day.humidityPercent === 'number' &&
+        typeof day.windSpeedKmh === 'number',
+    )
+  );
+}
+
+function hasValidAdvisory(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.summary === 'string' &&
+    Array.isArray(value.actions) &&
+    value.actions.every((action) => typeof action === 'string')
+  );
+}
+
 export function parseCropAdvisoryResponse(raw: unknown): CropAdvisorySuccess {
-  if (typeof raw !== 'object' || raw === null || !('success' in raw)) {
+  if (!isRecord(raw) || !('success' in raw)) {
     throw new AdvisoryRequestError('INVALID_RESPONSE', 'Unexpected response from the advisory service.');
   }
 
-  const response = raw as {
-    success?: unknown;
-    assessmentStatus?: unknown;
-    risks?: unknown;
-    weather?: { dailyForecast?: unknown };
-    advisory?: unknown;
-    error?: { code?: string; message?: string };
-  };
-
-  if (response.success === false) {
-    const code = response.error?.code ?? '';
+  if (raw.success === false) {
+    const error = isRecord(raw.error) ? raw.error : {};
+    const code = typeof error.code === 'string' ? error.code : '';
     const known = KNOWN_ERROR_CODES.includes(code) ? (code as AdvisoryErrorCode) : 'INTERNAL_SERVER_ERROR';
-    throw new AdvisoryRequestError(known, response.error?.message ?? 'Advisory request failed.');
+    const message = typeof error.message === 'string' ? error.message : 'Advisory request failed.';
+    throw new AdvisoryRequestError(known, message);
   }
 
   if (
-    response.success !== true ||
-    !Array.isArray(response.risks) ||
-    !Array.isArray(response.weather?.dailyForecast) ||
-    !response.advisory ||
-    typeof response.assessmentStatus !== 'string'
+    raw.success !== true ||
+    typeof raw.assessmentStatus !== 'string' ||
+    !ASSESSMENT_STATUSES.includes(raw.assessmentStatus) ||
+    !hasValidRisks(raw.risks) ||
+    !hasValidWeather(raw.weather) ||
+    !hasValidAdvisory(raw.advisory) ||
+    typeof raw.aiStatus !== 'string'
   ) {
     throw new AdvisoryRequestError('INVALID_RESPONSE', 'Advisory response is missing required fields.');
   }
 
-  return response as CropAdvisorySuccess;
+  return raw as unknown as CropAdvisorySuccess;
 }
 
 function sameText(text: string): Bilingual {
@@ -87,7 +132,7 @@ export function toAdvisoryResponse(data: CropAdvisorySuccess): AdvisoryResponse 
         tempMax: day.temperatureMaxC,
         tempMin: day.temperatureMinC,
         precipitation: day.precipitationMm,
-        rainProbability: day.precipitationProbabilityPct ?? null,
+        rainProbability: null,
         humidity: day.humidityPercent,
         windSpeed: day.windSpeedKmh,
       })),

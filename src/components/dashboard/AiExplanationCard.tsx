@@ -38,11 +38,15 @@ export default function AiExplanationCard({ summary, actions, aiFallback, onRetr
         <Sparkles className="h-5 w-5 text-accent-600" aria-hidden="true" />
         {t(copy.aiTitle)}
       </h2>
-      {aiFallback && (
+      {aiFallback ? (
         <div className="flex flex-col gap-1 rounded-xl bg-warning-50 p-3">
           <p className="text-sm font-semibold text-warning-900">{t(copy.aiFallbackLabel)}</p>
           <p className="text-sm text-warning-900">{t(copy.aiFallbackText)}</p>
         </div>
+      ) : (
+        <p className="w-fit rounded-full bg-accent-50 px-3 py-1 text-sm font-semibold text-accent-700">
+          {t(copy.aiGeneratedLabel)}
+        </p>
       )}
       {actions.length > 0 && (
         <ul className="flex flex-col gap-2">

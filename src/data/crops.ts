@@ -26,7 +26,7 @@ export const CROPS: CropDefinition[] = [
         imageUrl: 'https://images.pexels.com/photos/36976807/pexels-photo-36976807.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
       },
       {
-        id: 'maturity',
+        id: 'maturity_ripening',
         label: { hi: 'पकना', en: 'Maturity / Ripening' },
         description: { hi: 'गन्ना पकने और कटाई की ओर बढ़ना', en: 'Cane ripening towards harvest' },
         imageUrl: 'https://images.pexels.com/photos/9622985/pexels-photo-9622985.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
@@ -52,7 +52,7 @@ export const CROPS: CropDefinition[] = [
         imageUrl: 'https://images.pexels.com/photos/771319/pexels-photo-771319.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
       },
       {
-        id: 'vegetative',
+        id: 'vegetative_growth',
         label: { hi: 'कल्ले निकलना', en: 'Vegetative (Tillering)' },
         description: { hi: 'पौधे में कल्ले और पत्तियां बढ़ना', en: 'More shoots and leaves forming' },
         imageUrl: 'https://images.pexels.com/photos/12150151/pexels-photo-12150151.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
@@ -64,7 +64,7 @@ export const CROPS: CropDefinition[] = [
         imageUrl: 'https://images.pexels.com/photos/11288849/pexels-photo-11288849.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',
       },
       {
-        id: 'grain_development',
+        id: 'grain_development_maturity',
         label: { hi: 'दाना भरना / पकना', en: 'Grain Filling / Maturity' },
         description: { hi: 'दाने बनना और फसल पकना', en: 'Grains filling and the crop maturing' },
         imageUrl: 'https://images.pexels.com/photos/33397323/pexels-photo-33397323.jpeg?auto=compress&cs=tinysrgb&h=650&w=940',

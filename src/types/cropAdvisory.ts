@@ -19,7 +19,6 @@ export interface CropAdvisoryDailyForecast {
   temperatureMaxC: number;
   temperatureMinC: number;
   precipitationMm: number;
-  precipitationProbabilityPct?: number | null;
   humidityPercent: number;
   windSpeedKmh: number;
 }

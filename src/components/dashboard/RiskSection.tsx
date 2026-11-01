@@ -28,13 +28,18 @@ export default function RiskSection({ assessmentStatus, risks, insufficientData 
           </p>
         )}
       </Card>
-    ) : (
+    ) : assessmentStatus === 'no_significant_risk' ? (
       <Card as="section" className="flex flex-col gap-3 border-success-600/30 bg-success-50">
         <h2 className="flex items-center gap-2 text-xl font-bold text-neutral-900">
           <CheckCircle2 className="h-6 w-6 shrink-0 text-success-700" aria-hidden="true" />
           {t(copy.noRiskTitle)}
         </h2>
         <p className="text-base text-neutral-700">{t(copy.noRiskText)}</p>
+      </Card>
+    ) : (
+      <Card as="section" className="flex flex-col gap-3 border-neutral-300">
+        <h2 className="text-xl font-bold text-neutral-900">{t(copy.riskListEmptyTitle)}</h2>
+        <p className="text-base text-neutral-700">{t(copy.riskListEmptyText)}</p>
       </Card>
     );
   }

@@ -153,6 +153,11 @@ export const copy = {
     en: 'This does not mean your crop is completely safe. Keep monitoring your field.',
   },
   insufficientTitle: { hi: 'पर्याप्त जानकारी नहीं है', en: 'Not enough information' },
+  riskListEmptyTitle: { hi: 'इस पूर्वानुमान की जोखिम सूची खाली है', en: 'The risk list for this forecast is empty' },
+  riskListEmptyText: {
+    hi: 'नीचे दी गई सलाह और मौसम की जानकारी ज़रूर देखें।',
+    en: 'Please read the advice and weather details below.',
+  },
   whyTitle: { hi: 'फसल पर असर क्यों?', en: 'Why it may matter' },
   precautionsTitle: { hi: 'क्या करें', en: 'What to do' },
   conditionTitle: { hi: 'मौसम में क्या दिख रहा है', en: 'Expected weather' },
@@ -160,6 +165,7 @@ export const copy = {
   sourcesTitle: { hi: 'स्रोत', en: 'Sources' },
   otherRisksTitle: { hi: 'अन्य संभावित खतरे', en: 'Other possible risks' },
   aiTitle: { hi: 'सरल भाषा में समझें', en: 'Explained simply' },
+  aiGeneratedLabel: { hi: 'AI द्वारा तैयार व्याख्या', en: 'AI-generated explanation' },
   aiFallbackLabel: { hi: 'नियम-आधारित विकल्प', en: 'Rule-based fallback' },
   aiFallbackText: {
     hi: 'AI व्याख्या अभी उपलब्ध नहीं है, इसलिए यह सरल जानकारी फसल के तय नियमों पर आधारित है।',

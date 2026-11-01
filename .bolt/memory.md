@@ -17,6 +17,9 @@
 - Dashboard is action-first: top risk + actions → Risk Advisory cards with sources → supporting weather → last-updated, refresh, loading/empty/error states.
 - Reusable speaker button using browser speech synthesis.
 - Mobile-friendly, rural-appropriate UX.
+- Crop risks and weather warnings displayed separately.
+- "No risk" message only for real no-significant-risk results; empty lists show neutral message, never misleading "No risk" when data is insufficient.
+- AI-generated explanations visually distinguished from rule-based fallback explanations (labeled headings).
 
 ## Decisions, constraints & rationale
 
@@ -29,15 +32,23 @@
 - `.gitignore` already covers `.env`.
 - API contract defined in `docs/api-contract.md` for `crop-advisory` Supabase Edge Function; frontend integration code written and passing type-check + production build.
 - Frontend env flags: `VITE_USE_MOCK_ADVISORY` (bool) toggles demo data vs live backend; live mode requires `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. Demo data remains default.
-- Contract shapes differ from original frontend types: no rain probability field, no separate action list, per-risk precautions handled differently. Components adapted: weather cards show dash for missing rain probability; advisory card shows action items; risk cards hide empty precaution lists.
+- Contract shapes differ from original frontend types: no rain probability field, no separate action list, per-risk precautions handled differently. Components adapted: weather cards show "Not available" for missing rain probability; advisory card shows action items; risk cards hide empty precaution lists.
 - Backend text returned in both Hindi and English; language switching will not re-translate without a re-request.
+- **Canonical growth-stage IDs** (in `src/data/crops.ts` and `src/data/mockRisks.ts`):
+  - Wheat: `early_growth`, `crown_root`, `vegetative_growth`, `reproductive`, `grain_development_maturity`
+  - Sugarcane: `germination`, `tillering`, `grand_growth`, `maturity_ripening`
+- **Removed invented fields:** `precipitationProbabilityPct` removed from types and contract adapter.
+- **Contract validation:** `advisoryContract.ts` parser now checks assessment status and each risk's severity against contract-defined values; checks advisory fields.
+- **Do not** modify backend code, invent API fields/response structures, hardcode sample responses, invent crop-risk rules/severity, or change API contract independently. Report missing fields rather than guessing.
+- **Do not** connect live API until backend endpoint and final contract are confirmed.
 
 ## Open questions & assumptions
 
 - Replace placeholder README title ("forge-26-zero-day") with "KisanRakshak"? — awaiting user confirmation.
 - Who validates remaining thresholds? Assumption: seed only IMD KALP rule as validated, mark rest pending unless user provides verified values.
-- Proposed implementation order: scaffold Vite+React+TS+Tailwind → Home → Farmer Details → Dashboard → speaker button → optional Chat/History → tests + README + `.env.example`.
-- **Growth-stage codes:** App sends stage IDs (e.g. `crown_root`), contract example uses short codes (e.g. `CRI`). Team needs to agree on canonical stage codes.
-- **Rain probability:** Not in API contract; currently shown as dash. Need to decide whether to add to contract or source elsewhere.
+- **Growth-stage code conflict:** App sends stage IDs like `crown_root`; contract example uses short codes like `CRI`. Team needs to agree on canonical stage codes.
+- **Rain probability:** Not in API contract; shown as "Not available". Need to decide whether to add to contract or source elsewhere.
 - **Language re-request:** Switching language doesn't re-fetch from backend; may need re-request on language change for proper translation.
 - Backend Edge Function not yet built; integration untested against live backend.
+- **Missing from agreed contract (reported, not built):** `weatherWarnings`, `notAssessedRisks`, `insufficientReason`, weather data-quality notes, advisory source/disclaimer field.
+- **`aiStatus` allowed values** not defined in contract; needs backend team input.
