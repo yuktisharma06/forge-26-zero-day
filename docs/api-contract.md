@@ -1,6 +1,6 @@
 # KisanRakshak API Contract — v1
 
-**Status:** Final draft for team lead review (not yet frozen). Aligned with the current backend implementation on `feature/backend`; pending frontend confirmation and live deployment verification.
+**Status:** Final draft for team lead review (not yet frozen). Verified against the deployed `crop-advisory` function on 1 Nov 2026; pending frontend confirmation.
 
 ## 1. Endpoint
 
@@ -8,6 +8,8 @@
 - Supabase Edge Function: `crop-advisory`
 - Path: `/functions/v1/crop-advisory`
 - Content-Type: `application/json`
+- Authentication: send `Authorization: Bearer sb_publishable_hC4rU26wCl5UfH7x2cWyuw_4LFNvCWs` and `apikey: sb_publishable_hC4rU26wCl5UfH7x2cWyuw_4LFNvCWs` (the Supabase anon/publishable key).
+- A missing or invalid key is rejected by the Supabase gateway with HTTP 401 and a body of the form `{"code": "...", "message": "..."}`. This is not the error shape in section 5, so the frontend must handle it separately.
 - Forecast window: 7 days
 - Weather provider: Open-Meteo
 
@@ -297,6 +299,7 @@ Known error codes:
 - `INTERNAL_SERVER_ERROR` — unexpected backend failure
 
 Typical HTTP statuses include 400 for invalid input, 404 for location not found, 502 for location/weather service failure, and 500 for unexpected errors. The frontend should check `response.ok` and parse error responses before attempting to parse a successful advisory.
+Requests using any method other than `POST` (or `OPTIONS` for CORS) return HTTP 405 with code `INVALID_INPUT` in the standard error shape. Missing or invalid authentication returns HTTP 401 from the Supabase gateway (see section 1).
 
 ## 6. Safety and frontend display requirements
 
