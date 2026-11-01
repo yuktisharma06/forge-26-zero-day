@@ -26,6 +26,7 @@ export default function SowingDateStep({ draft, onDateChange }: SowingDateStepPr
       <div className="flex flex-col gap-2">
         <label htmlFor="sowing-date" className="text-base font-semibold text-neutral-900">
           {t(copy.sowingLabel)}
+          <span className="ml-2 text-sm font-normal text-neutral-600">({t(copy.optional)})</span>
         </label>
         <input
           id="sowing-date"

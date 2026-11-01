@@ -24,6 +24,7 @@ export async function fetchMockAdvisory(input: FarmerInput): Promise<AdvisoryRes
     risks: stageAdvisory.risks,
     insufficientData: stageAdvisory.insufficientData,
     aiSummary: stageAdvisory.aiSummary,
+    aiFallback: false,
     actions: [],
   };
 }

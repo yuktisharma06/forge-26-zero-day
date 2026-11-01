@@ -9,10 +9,11 @@ import type { Bilingual } from '../../types/farm';
 interface AiExplanationCardProps {
   summary: Bilingual | null;
   actions: Bilingual[];
+  aiFallback: boolean;
   onRetry: () => void;
 }
 
-export default function AiExplanationCard({ summary, actions, onRetry }: AiExplanationCardProps) {
+export default function AiExplanationCard({ summary, actions, aiFallback, onRetry }: AiExplanationCardProps) {
   const { t } = useLanguage();
 
   if (!summary) {
@@ -37,7 +38,12 @@ export default function AiExplanationCard({ summary, actions, onRetry }: AiExpla
         <Sparkles className="h-5 w-5 text-accent-600" aria-hidden="true" />
         {t(copy.aiTitle)}
       </h2>
-      <p className="text-lg leading-relaxed text-neutral-900">{t(summary)}</p>
+      {aiFallback && (
+        <div className="flex flex-col gap-1 rounded-xl bg-warning-50 p-3">
+          <p className="text-sm font-semibold text-warning-900">{t(copy.aiFallbackLabel)}</p>
+          <p className="text-sm text-warning-900">{t(copy.aiFallbackText)}</p>
+        </div>
+      )}
       {actions.length > 0 && (
         <ul className="flex flex-col gap-2">
           {actions.map((action) => (

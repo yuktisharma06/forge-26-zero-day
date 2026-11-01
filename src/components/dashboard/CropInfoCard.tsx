@@ -30,7 +30,9 @@ export default function CropInfoCard({ input }: CropInfoCardProps) {
         </div>
         <div>
           <dt className="text-sm text-neutral-600">{t(copy.sowingLabel)}</dt>
-          <dd className="text-base font-semibold text-neutral-900">{formatLongDate(input.sowingDate, lang)}</dd>
+          <dd className="text-base font-semibold text-neutral-900">
+            {input.sowingDate ? formatLongDate(input.sowingDate, lang) : t(copy.notProvided)}
+          </dd>
         </div>
       </dl>
     </Card>

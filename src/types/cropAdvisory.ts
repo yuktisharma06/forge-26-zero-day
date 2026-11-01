@@ -3,7 +3,7 @@ import type { AssessmentStatus, CropId, Language, RiskLevel } from './farm';
 export interface CropAdvisoryRequest {
   location: string;
   crop: CropId;
-  sowingDate: string;
+  sowingDate?: string;
   growthStage: string;
   language: Language;
 }
@@ -19,6 +19,7 @@ export interface CropAdvisoryDailyForecast {
   temperatureMaxC: number;
   temperatureMinC: number;
   precipitationMm: number;
+  precipitationProbabilityPct?: number | null;
   humidityPercent: number;
   windSpeedKmh: number;
 }

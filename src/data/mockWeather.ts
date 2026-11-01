@@ -5,7 +5,7 @@ const DAILY_SAMPLE: Omit<DailyForecast, 'date'>[] = [
   { tempMax: 32, tempMin: 19, precipitation: 0, rainProbability: 15, humidity: 61, windSpeed: 10 },
   { tempMax: 30, tempMin: 20, precipitation: 12.4, rainProbability: 75, humidity: 82, windSpeed: 16 },
   { tempMax: 27, tempMin: 19, precipitation: 6.1, rainProbability: 60, humidity: 84, windSpeed: 14 },
-  { tempMax: 29, tempMin: 17, precipitation: 0, rainProbability: 20, humidity: 70, windSpeed: 11 },
+  { tempMax: 29, tempMin: 17, precipitation: 0, rainProbability: null, humidity: 70, windSpeed: 11 },
   { tempMax: 33, tempMin: 18, precipitation: 0, rainProbability: 5, humidity: 52, windSpeed: 8 },
   { tempMax: 34, tempMin: 20, precipitation: 0, rainProbability: 10, humidity: 49, windSpeed: 7 },
 ];
@@ -24,5 +24,5 @@ export function buildMockForecast(now: Date = new Date()): WeatherForecast {
     return { date: toLocalIsoDate(date), ...day };
   });
 
-  return { fetchedAt: now.toISOString(), daily };
+  return { source: null, fetchedAt: now.toISOString(), daily };
 }

@@ -20,7 +20,7 @@ function localIsoDate(date: Date): string {
 }
 
 export function validateSowingDate(sowingDate: string, today: Date = new Date()): Bilingual | null {
-  if (!sowingDate) return copy.errors.dateMissing;
+  if (!sowingDate) return null;
   if (!ISO_DATE_PATTERN.test(sowingDate) || Number.isNaN(Date.parse(sowingDate))) return copy.errors.dateInvalid;
 
   if (sowingDate > localIsoDate(today)) return copy.errors.dateFuture;

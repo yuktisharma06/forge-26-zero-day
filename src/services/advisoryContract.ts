@@ -3,7 +3,7 @@ import type { CropAdvisoryErrorCode, CropAdvisoryRequest, CropAdvisorySuccess } 
 
 export const CROP_ADVISORY_PATH = '/functions/v1/crop-advisory';
 
-export type AdvisoryErrorCode = CropAdvisoryErrorCode | 'NETWORK_ERROR';
+export type AdvisoryErrorCode = CropAdvisoryErrorCode | 'NETWORK_ERROR' | 'TIMEOUT' | 'INVALID_RESPONSE';
 
 const KNOWN_ERROR_CODES: readonly string[] = [
   'INVALID_INPUT',
@@ -27,15 +27,19 @@ export function buildCropAdvisoryRequest(input: FarmerInput): CropAdvisoryReques
   return {
     location: input.location.name.en,
     crop: input.cropId,
-    sowingDate: input.sowingDate,
+    ...(input.sowingDate ? { sowingDate: input.sowingDate } : {}),
     growthStage: input.stageId,
     language: input.language,
   };
 }
 
+export function isFailureBody(raw: unknown): boolean {
+  return typeof raw === 'object' && raw !== null && (raw as { success?: unknown }).success === false;
+}
+
 export function parseCropAdvisoryResponse(raw: unknown): CropAdvisorySuccess {
   if (typeof raw !== 'object' || raw === null || !('success' in raw)) {
-    throw new AdvisoryRequestError('INTERNAL_SERVER_ERROR', 'Unexpected response from the advisory service.');
+    throw new AdvisoryRequestError('INVALID_RESPONSE', 'Unexpected response from the advisory service.');
   }
 
   const response = raw as {
@@ -60,7 +64,7 @@ export function parseCropAdvisoryResponse(raw: unknown): CropAdvisorySuccess {
     !response.advisory ||
     typeof response.assessmentStatus !== 'string'
   ) {
-    throw new AdvisoryRequestError('INTERNAL_SERVER_ERROR', 'Advisory response is missing required fields.');
+    throw new AdvisoryRequestError('INVALID_RESPONSE', 'Advisory response is missing required fields.');
   }
 
   return response as CropAdvisorySuccess;
@@ -76,13 +80,14 @@ export function toAdvisoryResponse(data: CropAdvisorySuccess): AdvisoryResponse 
   return {
     assessmentStatus: data.assessmentStatus,
     forecast: {
+      source: data.weather.source || null,
       fetchedAt: data.weather.fetchedAt,
       daily: data.weather.dailyForecast.map((day) => ({
         date: day.date,
         tempMax: day.temperatureMaxC,
         tempMin: day.temperatureMinC,
         precipitation: day.precipitationMm,
-        rainProbability: null,
+        rainProbability: day.precipitationProbabilityPct ?? null,
         humidity: day.humidityPercent,
         windSpeed: day.windSpeedKmh,
       })),
@@ -98,7 +103,8 @@ export function toAdvisoryResponse(data: CropAdvisorySuccess): AdvisoryResponse 
       sources: risk.source ? [{ name: risk.source.title, url: risk.source.url }] : [],
     })),
     insufficientData: data.assessmentStatus === 'insufficient_data' ? summary : null,
-    aiSummary: data.aiStatus === 'completed' ? summary : null,
+    aiSummary: summary,
+    aiFallback: summary !== null && data.aiStatus !== 'completed',
     actions: data.advisory.actions.map(sameText),
   };
 }

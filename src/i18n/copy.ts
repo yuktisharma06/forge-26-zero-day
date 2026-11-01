@@ -51,6 +51,9 @@ export const copy = {
     en: 'Pick the sowing date. This helps us give advice that fits your crop.',
   },
   sowingLabel: { hi: 'बुवाई की तारीख', en: 'Sowing date' },
+  optional: { hi: 'वैकल्पिक', en: 'Optional' },
+  notProvided: { hi: 'नहीं दी गई', en: 'Not provided' },
+  notAvailable: { hi: 'उपलब्ध नहीं', en: 'Not available' },
   reviewTitle: { hi: 'आपकी जानकारी', en: 'Your details' },
   summaryLocation: { hi: 'स्थान', en: 'Location' },
   summaryCrop: { hi: 'फसल', en: 'Crop' },
@@ -68,7 +71,6 @@ export const copy = {
     location: { hi: 'कृपया अपना स्थान चुनें।', en: 'Please choose your location.' },
     crop: { hi: 'कृपया फसल चुनें।', en: 'Please choose your crop.' },
     stage: { hi: 'कृपया फसल का मौजूदा चरण चुनें।', en: 'Please choose your current growth stage.' },
-    dateMissing: { hi: 'कृपया बुवाई की तारीख डालें।', en: 'Please enter the sowing date.' },
     dateInvalid: { hi: 'बुवाई की तारीख सही नहीं है। कृपया जांचें।', en: 'The sowing date is not valid. Please check it.' },
     dateFuture: {
       hi: 'बुवाई की तारीख आज या उससे पहले की होनी चाहिए।',
@@ -118,6 +120,26 @@ export const copy = {
     hi: 'अभी मौसम की जानकारी नहीं मिल पा रही है। थोड़ी देर बाद फिर से कोशिश करें।',
     en: 'Weather information is not available right now. Please try again later.',
   },
+  invalidInputText: {
+    hi: 'दी गई जानकारी सही नहीं है। कृपया स्थान, फसल और चरण दोबारा जाँचें।',
+    en: 'The details entered are not valid. Please check your location, crop and stage.',
+  },
+  serverErrorText: {
+    hi: 'सर्वर पर कुछ गड़बड़ी हुई है। कृपया थोड़ी देर बाद फिर से कोशिश करें।',
+    en: 'Something went wrong on our server. Please try again shortly.',
+  },
+  timeoutText: {
+    hi: 'जवाब में बहुत देर लगी। कृपया फिर से कोशिश करें।',
+    en: 'The server took too long to respond. Please try again.',
+  },
+  invalidResponseText: {
+    hi: 'सर्वर से अधूरी जानकारी मिली। कृपया फिर से कोशिश करें।',
+    en: 'We received incomplete information from the server. Please try again.',
+  },
+  networkErrorText: {
+    hi: 'इंटरनेट कनेक्शन जांचें और फिर से कोशिश करें।',
+    en: 'Please check your internet connection and try again.',
+  },
   errorTitle: { hi: 'जानकारी नहीं मिल सकी', en: 'Could not get the information' },
   errorText: {
     hi: 'अभी मौसम की जानकारी नहीं मिल पा रही है। कृपया फिर से कोशिश करें।',
@@ -138,6 +160,12 @@ export const copy = {
   sourcesTitle: { hi: 'स्रोत', en: 'Sources' },
   otherRisksTitle: { hi: 'अन्य संभावित खतरे', en: 'Other possible risks' },
   aiTitle: { hi: 'सरल भाषा में समझें', en: 'Explained simply' },
+  aiFallbackLabel: { hi: 'नियम-आधारित विकल्प', en: 'Rule-based fallback' },
+  aiFallbackText: {
+    hi: 'AI व्याख्या अभी उपलब्ध नहीं है, इसलिए यह सरल जानकारी फसल के तय नियमों पर आधारित है।',
+    en: 'The AI explanation is unavailable, so this simple explanation is based on fixed crop rules.',
+  },
+  weatherSource: { hi: 'मौसम का स्रोत', en: 'Weather source' },
   aiUnavailable: {
     hi: 'AI की व्याख्या अभी उपलब्ध नहीं है। ऊपर दिए गए खतरे और सलाह देखें।',
     en: 'The AI explanation is temporarily unavailable. The risks and advice above still apply.',

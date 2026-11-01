@@ -49,6 +49,7 @@ export interface DailyForecast {
 }
 
 export interface WeatherForecast {
+  source: string | null;
   fetchedAt: string;
   daily: DailyForecast[];
 }
@@ -79,5 +80,6 @@ export interface AdvisoryResponse {
   risks: WeatherRisk[];
   insufficientData: Bilingual | null;
   aiSummary: Bilingual | null;
+  aiFallback: boolean;
   actions: Bilingual[];
 }
