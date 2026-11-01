@@ -78,132 +78,247 @@ async function call(body: unknown, deps: Deps) {
 
 const base = { location: 'Saharanpur', language: 'en' };
 
-Deno.test('wheat early_growth with the real Saharanpur forecast -> no significant risk', async () => {
+// Replace the temperature / rainfall of selected forecast days (0-based index).
+function withDays(over: Record<number, Partial<{ max: number; min: number; rain: number }>>): [number, number, number][] {
+  return SAHARANPUR.map(([mx, mn, rn], i) => {
+    const o = over[i] ?? {};
+    return [o.max ?? mx, o.min ?? mn, o.rain ?? rn] as [number, number, number];
+  });
+}
+const allDays = (o: Partial<{ max: number; min: number; rain: number }>) => withDays({ 0: o, 1: o, 2: o, 3: o, 4: o, 5: o, 6: o });
+const ids = (arr: { id: string }[]) => arr.map((x) => x.id);
+
+Deno.test('response keeps risks, weatherWarnings and notAssessedRisks as separate arrays', async () => {
   const r = await call({ ...base, crop: 'wheat', growthStage: 'early_growth' }, makeDeps());
   assertEq(r.status, 200, 'status');
-  assertEq(r.json.assessmentStatus, 'no_significant_risk', 'assessmentStatus');
-  assertEq(r.json.risks, [], 'risks');
-  assertEq(r.json.aiStatus, 'skipped', 'aiStatus');
+  assertTrue(Array.isArray(r.json.risks), 'risks array');
+  assertTrue(Array.isArray(r.json.weatherWarnings), 'weatherWarnings array');
+  assertTrue(Array.isArray(r.json.notAssessedRisks), 'notAssessedRisks array');
+  assertEq(r.json.assessmentStatus, 'no_significant_risk', 'nothing triggered on the real Saharanpur forecast');
+  assertEq(r.json.risks, [], 'risks empty');
+  assertEq(r.json.weatherWarnings, [], 'no warnings');
+  assertTrue('insufficientReason' in r.json && r.json.insufficientReason === null, 'insufficientReason is null');
+  assertEq(r.json.weather.source, 'Open-Meteo', 'weather from Open-Meteo');
 });
 
-const HOT_FLOWERING = SAHARANPUR.map(([_, min, rain]) => [27.5, min, rain] as [number, number, number]);
-
-Deno.test('wheat reproductive with 27 C days -> Low risk, flat source, no "potential" severity', async () => {
-  const r = await call({ ...base, crop: 'wheat', growthStage: 'reproductive' }, makeDeps({ rows: HOT_FLOWERING }));
-  assertEq(r.json.assessmentStatus, 'completed', 'assessmentStatus');
-  const risk = r.json.risks.find((x: { id: string }) => x.id === 'wheat_reproductive_heat');
-  assertEq(risk.severity, 'low', 'engine severity passes through lowercased');
-  // Contract shape: source.title and source.url are plain strings / null, never objects.
-  assertEq(typeof risk.source.title, 'string', 'source.title is a string');
-  assertTrue(risk.source.url === null || typeof risk.source.url === 'string', 'source.url is string or null');
-  assertEq(typeof risk.source.citation, 'string', 'source.citation');
-  assertEq(risk.source.evidenceType, 'research_literature', 'evidence type exposed');
-  assertTrue(typeof risk.source.applicabilityNote === 'string', 'applicability note exposed');
-  assertTrue(Array.isArray(risk.caveats) && risk.caveats.length > 0, 'caveats exposed');
-  assertEq(risk.triggeredDates.length, 7, 'all 7 days cross 26 C');
-  assertEq(r.json.aiStatus, 'fallback', 'no Gemini key -> rule-based text');
-  assertEq(r.json.advisory.writtenBy, 'rules', 'written by rules');
-  assertTrue(r.json.advisory.actions.length > 0, 'advisory still has actions');
+Deno.test('wheat grain development, Tmax 36 C -> informational heat warning, no High risk', async () => {
+  const r = await call({ ...base, crop: 'wheat', growthStage: 'grain_development_maturity' }, makeDeps({ rows: withDays({ 3: { max: 36 } }) }));
+  assertEq(r.json.risks, [], 'no crop risk');
+  assertEq(r.json.assessmentStatus, 'completed', 'completed');
+  assertEq(r.json.weatherWarnings.length, 1, 'one warning (one hot day)');
+  const w = r.json.weatherWarnings[0];
+  assertEq(w.id, 'wheat_grain_development_heat', 'id');
+  assertEq(w.category, 'heat', 'category');
+  assertEq(w.crop, 'wheat', 'crop');
+  assertEq(w.growthStage, 'grain_development_maturity', 'stage');
+  assertEq(w.observedValue, 36, 'value comes from the forecast');
+  assertEq(w.unit, '°C', 'unit');
+  assertEq(w.date, dateOffset(3), 'date comes from the forecast');
+  assertTrue(!('severity' in w), 'warnings carry no severity');
+  assertTrue(w.caveat.includes('not a locally validated'), 'caveat present');
+  assertTrue(!/confirm.*damage/i.test(w.message) || /cannot confirm/i.test(w.message), 'does not confirm damage');
 });
 
-Deno.test('every returned severity is low, moderate or high', async () => {
-  const cases: [string, string, [number, number, number][]][] = [
-    ['wheat', 'reproductive', HOT_FLOWERING],
-    ['wheat', 'grain_development_maturity', SAHARANPUR.map(([_, mn, rn]) => [36, mn, rn] as [number, number, number])],
-    ['sugarcane', 'tillering', SAHARANPUR.map(([mx, _, rn]) => [mx, -4.5, rn] as [number, number, number])],
-  ];
-  for (const [crop, stage, rows] of cases) {
-    const r = await call({ ...base, crop, growthStage: stage }, makeDeps({ rows }));
-    assertTrue(r.json.risks.length > 0, `${crop}/${stage} has a risk`);
-    for (const risk of r.json.risks) {
-      assertTrue(['low', 'moderate', 'high'].includes(risk.severity), `bad severity ${risk.severity}`);
+Deno.test('wheat heat exactly 35 C is not a warning (strictly greater)', async () => {
+  const r = await call({ ...base, crop: 'wheat', growthStage: 'grain_development_maturity' }, makeDeps({ rows: allDays({ max: 35 }) }));
+  assertEq(r.json.weatherWarnings, [], 'no warning at 35');
+});
+
+Deno.test('wheat reproductive, Tmax 27 C -> no 26 C flowering rule', async () => {
+  const r = await call({ ...base, crop: 'wheat', growthStage: 'reproductive' }, makeDeps({ rows: allDays({ max: 27 }) }));
+  assertEq(r.json.risks, [], 'no risk');
+  assertEq(r.json.weatherWarnings, [], 'no warning');
+  assertEq(r.json.assessmentStatus, 'no_significant_risk', 'status');
+  assertTrue(ids(r.json.notAssessedRisks).includes('wheat_flowering_heat_damage'), 'flowering heat listed as not assessed');
+});
+
+Deno.test('wheat grain development, Tmax 31 C -> no 30/31 C severity rule and no warning', async () => {
+  const r = await call({ ...base, crop: 'wheat', growthStage: 'grain_development_maturity' }, makeDeps({ rows: allDays({ max: 31 }) }));
+  assertEq(r.json.risks, [], 'no risk');
+  assertEq(r.json.weatherWarnings, [], 'no warning');
+  assertTrue(ids(r.json.notAssessedRisks).includes('wheat_terminal_heat_damage'), 'terminal heat damage not assessed');
+});
+
+Deno.test('sugarcane, Tmax 39 C -> informational warning at any stage, no Low risk', async () => {
+  for (const stage of ['germination', 'tillering', 'grand_growth', 'maturity_ripening']) {
+    const r = await call({ ...base, crop: 'sugarcane', growthStage: stage }, makeDeps({ rows: withDays({ 2: { max: 39 } }) }));
+    assertEq(r.json.risks, [], `${stage}: no risk`);
+    assertEq(ids(r.json.weatherWarnings), ['sugarcane_high_temperature'], `${stage}: warning`);
+    assertEq(r.json.weatherWarnings[0].observedValue, 39, `${stage}: value`);
+  }
+  const at38 = await call({ ...base, crop: 'sugarcane', growthStage: 'tillering' }, makeDeps({ rows: allDays({ max: 38 }) }));
+  assertEq(at38.json.weatherWarnings, [], '38 C is not above 38');
+});
+
+Deno.test('sugarcane, Tmin -3 C -> no frost severity rule; frost listed as not assessed', async () => {
+  const r = await call({ ...base, crop: 'sugarcane', growthStage: 'tillering' }, makeDeps({ rows: allDays({ min: -3 }) }));
+  assertEq(r.json.risks, [], 'no risk');
+  assertEq(r.json.weatherWarnings, [], 'no warning');
+  assertTrue(ids(r.json.notAssessedRisks).includes('sugarcane_frost_damage'), 'sugarcane frost not assessed');
+});
+
+Deno.test('wheat cold nights -> no frost severity rule; frost listed as not assessed', async () => {
+  const r = await call({ ...base, crop: 'wheat', growthStage: 'reproductive' }, makeDeps({ rows: allDays({ min: -3 }) }));
+  assertEq(r.json.risks, [], 'no risk');
+  assertEq(r.json.weatherWarnings, [], 'no warning');
+  assertTrue(ids(r.json.notAssessedRisks).includes('wheat_frost_damage'), 'wheat frost not assessed');
+});
+
+Deno.test('rainfall 70 / 130 / 210 mm -> heavy / very heavy / extremely heavy warning only', async () => {
+  const cases: [number, string][] = [[70, 'heavy_rainfall'], [130, 'very_heavy_rainfall'], [210, 'extremely_heavy_rainfall']];
+  for (const crop of [['wheat', 'vegetative_growth'], ['sugarcane', 'grand_growth']]) {
+    for (const [mm, id] of cases) {
+      const r = await call({ ...base, crop: crop[0], growthStage: crop[1] }, makeDeps({ rows: withDays({ 4: { rain: mm } }) }));
+      assertEq(r.json.risks, [], `${crop[0]} ${mm} mm: no crop risk`);
+      assertEq(ids(r.json.weatherWarnings), [id], `${crop[0]} ${mm} mm: category`);
+      assertEq(r.json.weatherWarnings[0].observedValue, mm, 'amount from forecast');
+      assertEq(r.json.weatherWarnings[0].date, dateOffset(4), 'date from forecast');
+      assertEq(r.json.weatherWarnings[0].category, 'rainfall', 'category');
+      assertTrue(!('severity' in r.json.weatherWarnings[0]), 'no severity');
     }
   }
 });
 
-Deno.test('terminal heat: 32 C -> low, 36 C -> high (highest tier crossed)', async () => {
-  const at = (t: number) => SAHARANPUR.map(([_, mn, rn]) => [t, mn, rn] as [number, number, number]);
-  const low = await call({ ...base, crop: 'wheat', growthStage: 'grain_development_maturity' }, makeDeps({ rows: at(32) }));
-  assertEq(low.json.risks.find((x: { id: string }) => x.id === 'wheat_grain_fill_heat').severity, 'low', '32 C');
-  const high = await call({ ...base, crop: 'wheat', growthStage: 'grain_development_maturity' }, makeDeps({ rows: at(36) }));
-  assertEq(high.json.risks.find((x: { id: string }) => x.id === 'wheat_grain_fill_heat').severity, 'high', '36 C');
+Deno.test('IMD rainfall boundaries', async () => {
+  const at = async (mm: number) =>
+    ids((await call({ ...base, crop: 'wheat', growthStage: 'early_growth' }, makeDeps({ rows: withDays({ 0: { rain: mm } }) }))).json.weatherWarnings);
+  assertEq(await at(64.4), [], '64.4 -> none');
+  assertEq(await at(64.5), ['heavy_rainfall'], '64.5 -> heavy');
+  assertEq(await at(115.5), ['heavy_rainfall'], '115.5 -> heavy');
+  assertEq(await at(115.6), ['very_heavy_rainfall'], '115.6 -> very heavy');
+  assertEq(await at(204.4), ['very_heavy_rainfall'], '204.4 -> very heavy');
+  assertEq(await at(204.5), ['extremely_heavy_rainfall'], '204.5 -> extremely heavy');
 });
 
-Deno.test('sugarcane frost applies at tillering but not at germination', async () => {
-  const cold = SAHARANPUR.map(([mx, _, rn]) => [mx, -4.5, rn] as [number, number, number]);
-  const t = await call({ ...base, crop: 'sugarcane', growthStage: 'tillering' }, makeDeps({ rows: cold }));
-  assertEq(t.json.risks.find((x: { id: string }) => x.id === 'sugarcane_frost').severity, 'moderate', 'tillering -4.5 C');
-  const g = await call({ ...base, crop: 'sugarcane', growthStage: 'germination' }, makeDeps({ rows: cold }));
-  assertEq(g.json.assessmentStatus, 'no_significant_risk', 'germination: frost rule not applied');
+Deno.test('each forecast day is evaluated independently (one warning per day)', async () => {
+  const r = await call({ ...base, crop: 'wheat', growthStage: 'early_growth' }, makeDeps({ rows: withDays({ 1: { rain: 70 }, 2: { rain: 130 }, 5: { rain: 70 } }) }));
+  assertEq(r.json.weatherWarnings.map((w: { id: string; date: string }) => `${w.id}@${w.date}`),
+    [`heavy_rainfall@${dateOffset(1)}`, `very_heavy_rainfall@${dateOffset(2)}`, `heavy_rainfall@${dateOffset(5)}`], 'per-day warnings');
 });
 
-Deno.test('Gemini text is used when valid, and the engine still decides the risks', async () => {
+Deno.test('rainfall never claims waterlogging; waterlogging is listed as not assessed', async () => {
+  const r = await call({ ...base, crop: 'wheat', growthStage: 'vegetative_growth' }, makeDeps({ rows: withDays({ 3: { rain: 130 } }) }));
+  const w = r.json.weatherWarnings[0];
+  assertTrue(/does not show waterlogging/i.test(w.caveat), 'caveat says it does not show waterlogging');
+  assertTrue(ids(r.json.notAssessedRisks).includes('waterlogging'), 'waterlogging not assessed');
+  assertTrue(ids(r.json.notAssessedRisks).includes('water_stress'), 'water stress not assessed');
+});
+
+Deno.test('sample weather -> no risks, no warnings, no assessment', async () => {
+  const r = await call({ ...base, crop: 'sugarcane', growthStage: 'germination' }, makeDeps({ sample: true, rows: allDays({ max: 45, rain: 300 }) }));
+  assertEq(r.json.assessmentStatus, 'insufficient_data', 'assessmentStatus');
+  assertEq(r.json.insufficientReason, 'sample_weather', 'reason');
+  assertEq(r.json.risks, [], 'risks');
+  assertEq(r.json.weatherWarnings, [], 'weatherWarnings');
+  assertEq(r.json.notAssessedRisks, [], 'notAssessedRisks');
+  assertEq(r.json.weather.dataStatus, 'sample', 'weather labelled as sample');
+  assertEq(r.json.aiStatus, 'skipped', 'Gemini not called');
+});
+
+Deno.test('stale weather -> no risks, no warnings, no assessment', async () => {
+  const deps = makeDeps();
+  deps.fetchWeather = () => {
+    const w = makeWeather(allDays({ max: 45, rain: 300 }));
+    w.daily = w.daily.map((d, i) => ({ ...d, date: dateOffset(-40 + i) }));
+    return Promise.resolve({ weather: w, is_fallback: false });
+  };
+  const r = await call({ ...base, crop: 'sugarcane', growthStage: 'germination' }, deps);
+  assertEq(r.json.assessmentStatus, 'insufficient_data', 'assessmentStatus');
+  assertEq(r.json.insufficientReason, 'stale_weather', 'reason');
+  assertEq(r.json.risks, [], 'risks');
+  assertEq(r.json.weatherWarnings, [], 'weatherWarnings');
+});
+
+Deno.test('missing measurement -> relevant rule skipped, never treated as zero or as a warning', async () => {
+  const deps = makeDeps();
+  deps.fetchWeather = () => {
+    const w = makeWeather(withDays({ 1: { max: 40, rain: 300 } }));
+    w.daily[1] = { ...w.daily[1], max_temp_c: null, precipitation_mm: null }; // the hot, wet day has no values
+    w.daily[3] = { ...w.daily[3], max_temp_c: 41 }; // a real hot day still triggers
+    return Promise.resolve({ weather: w, is_fallback: false });
+  };
+  const r = await call({ ...base, crop: 'sugarcane', growthStage: 'tillering' }, deps);
+  assertEq(r.json.weatherWarnings.map((x: { date: string }) => x.date), [dateOffset(3)], 'only the day with data');
+  assertTrue(r.json.notes.length > 0, 'a note says some values were missing');
+  assertEq(r.json.risks, [], 'no risks');
+});
+
+Deno.test('all relevant measurements missing -> nothing triggered, not an error', async () => {
+  const deps = makeDeps();
+  deps.fetchWeather = () => {
+    const w = makeWeather(SAHARANPUR);
+    w.daily = w.daily.map((d) => ({ ...d, max_temp_c: null, precipitation_mm: null }));
+    return Promise.resolve({ weather: w, is_fallback: false });
+  };
+  const r = await call({ ...base, crop: 'sugarcane', growthStage: 'germination' }, deps);
+  assertEq(r.status, 200, 'status');
+  assertEq(r.json.weatherWarnings, [], 'no warnings from missing data');
+  assertTrue(r.json.notes.length > 0, 'note explains skipped checks');
+});
+
+Deno.test('Gemini unavailable -> rule-based advisory, deterministic results unchanged', async () => {
+  const rows = withDays({ 3: { max: 36 } });
+  const off = await call({ ...base, crop: 'wheat', growthStage: 'grain_development_maturity' }, makeDeps({ rows }));
+  assertEq(off.json.aiStatus, 'fallback', 'aiStatus');
+  assertEq(off.json.advisory.writtenBy, 'rules', 'rule-based');
+  assertTrue(off.json.advisory.actions.length > 0, 'monitoring action present');
+  const failing = await call({ ...base, crop: 'wheat', growthStage: 'grain_development_maturity' },
+    makeDeps({ rows, explain: () => Promise.resolve({ ok: false as const, reason: 'AI_HTTP_503' }) }));
+  assertEq(failing.json.aiNote, 'AI_HTTP_503', 'reason code kept');
+  assertEq(failing.json.weatherWarnings, off.json.weatherWarnings, 'warnings identical');
+  assertEq(failing.json.risks, off.json.risks, 'risks identical');
+});
+
+Deno.test('Gemini explains warnings but cannot change them or add risks', async () => {
+  const rows = withDays({ 3: { max: 36 } });
   let seen: Parameters<Deps['explain']>[0] | null = null;
   const explain: Deps['explain'] = (args) => {
     seen = args;
     return Promise.resolve({
       ok: true as const,
       explanation: {
-        summary: 'Hot days may affect your wheat.',
-        risks: [{ rule_id: 'wheat_reproductive_heat', title: 'Hot days at flowering', reason: 'Heat may affect flowering.' }],
-        actions: ['Ask your local KVK about irrigation timing.'],
+        summary: 'Hot afternoons are forecast while your wheat fills grain. Keep watching the crop.',
+        risks: [],
+        actions: ['Monitor the crop and local weather advisories.'],
       },
     });
   };
-  const r = await call({ ...base, crop: 'wheat', growthStage: 'reproductive' }, makeDeps({ rows: HOT_FLOWERING, explain }));
-  assertEq(r.json.aiStatus, 'completed', 'aiStatus');
-  assertEq(r.json.risks[0].name, 'Hot days at flowering', 'AI title used');
-  assertEq(r.json.risks[0].severity, 'low', 'severity untouched by AI');
-  assertEq(r.json.advisory.writtenBy, 'ai', 'written by ai');
-  // Gemini receives the source name as a string plus the evidence notes.
-  const sent = seen!.risks[0];
-  assertEq(typeof sent.source_name, 'string', 'source_name is a string');
-  assertEq(sent.evidence_type, 'research_literature', 'evidence_type passed to Gemini');
-  assertTrue(sent.caveats.length > 0, 'caveats passed to Gemini');
+  const plain = await call({ ...base, crop: 'wheat', growthStage: 'grain_development_maturity' }, makeDeps({ rows }));
+  const ai = await call({ ...base, crop: 'wheat', growthStage: 'grain_development_maturity' }, makeDeps({ rows, explain }));
+  assertEq(ai.json.aiStatus, 'completed', 'aiStatus');
+  assertEq(ai.json.advisory.writtenBy, 'ai', 'written by ai');
+  assertEq(ai.json.weatherWarnings, plain.json.weatherWarnings, 'warnings unchanged by Gemini');
+  assertEq(ai.json.risks, [], 'Gemini cannot create risks');
+  assertEq(seen!.risks.length, 0, 'no risks sent');
+  assertEq(seen!.warnings!.length, 1, 'warning sent for explanation');
+  assertEq(seen!.warnings![0].peak_value, 36, 'forecast value sent');
 });
 
-Deno.test('Gemini failure -> deterministic risks kept, rule-based advisory, aiStatus fallback', async () => {
-  const explain: Deps['explain'] = () => Promise.resolve({ ok: false as const, reason: 'AI_HTTP_503' });
-  const r = await call({ ...base, crop: 'wheat', growthStage: 'reproductive' }, makeDeps({ rows: HOT_FLOWERING, explain }));
-  assertEq(r.status, 200, 'still 200');
-  assertEq(r.json.assessmentStatus, 'completed', 'assessmentStatus');
-  assertEq(r.json.risks.length > 0, true, 'risks kept');
-  assertEq(r.json.aiStatus, 'fallback', 'aiStatus');
-  assertEq(r.json.advisory.writtenBy, 'rules', 'rule-based text');
+Deno.test('Gemini is not called when nothing was triggered or the weather is unusable', async () => {
+  let calls = 0;
+  const explain: Deps['explain'] = () => { calls++; return Promise.resolve({ ok: false as const, reason: 'x' }); };
+  await call({ ...base, crop: 'wheat', growthStage: 'early_growth' }, makeDeps({ explain }));
+  await call({ ...base, crop: 'wheat', growthStage: 'early_growth' }, makeDeps({ explain, sample: true }));
+  assertEq(calls, 0, 'explain never called');
 });
 
-Deno.test('no-risk result lists the risks that were NOT assessed', async () => {
-  const r = await call({ ...base, crop: 'wheat', growthStage: 'early_growth' }, makeDeps());
-  assertEq(r.json.assessmentStatus, 'no_significant_risk', 'assessmentStatus');
-  assertTrue(r.json.notAssessedRisks.length > 0, 'not-assessed list present');
+Deno.test('Hindi request returns Hindi warning, caveat and not-assessed text', async () => {
+  const r = await call({ ...base, language: 'hi', crop: 'sugarcane', growthStage: 'grand_growth' }, makeDeps({ rows: withDays({ 2: { max: 40 } }) }));
+  const dev = /[\u0900-\u097F]/;
+  assertTrue(dev.test(r.json.weatherWarnings[0].message), 'warning message in Hindi');
+  assertTrue(dev.test(r.json.weatherWarnings[0].caveat), 'caveat in Hindi');
+  assertTrue(dev.test(r.json.notAssessedRisks[0].explanation), 'not-assessed text in Hindi');
+  assertTrue(dev.test(r.json.advisory.summary), 'advisory in Hindi');
 });
 
-Deno.test('Hindi request with a risk returns Hindi reason and Hindi action', async () => {
-  const r = await call({ ...base, language: 'hi', crop: 'wheat', growthStage: 'reproductive' }, makeDeps({ rows: HOT_FLOWERING }));
-  assertTrue(/[\u0900-\u097F]/.test(r.json.risks[0].reason), 'reason in Hindi');
-  assertTrue(/[\u0900-\u097F]/.test(r.json.risks[0].preventiveAction), 'action in Hindi');
-});
-
-Deno.test('sample weather never reaches the risk engine -> insufficient_data', async () => {
-  const r = await call({ ...base, crop: 'sugarcane', growthStage: 'germination' }, makeDeps({ sample: true }));
-  assertEq(r.json.assessmentStatus, 'insufficient_data', 'assessmentStatus');
-  assertEq(r.json.insufficientReason, 'sample_weather', 'reason');
-  assertEq(r.json.risks, [], 'risks');
-  assertEq(r.json.weather.dataStatus, 'sample', 'weather labelled as sample');
-});
-
-Deno.test('missing weather values the rules need -> insufficient_data, not "no risk"', async () => {
-  const deps = makeDeps();
-  deps.fetchWeather = () => {
-    const w = makeWeather(SAHARANPUR);
-    // sugarcane germination rules need max temp (heat) and rainfall (heavy rain)
-    w.daily = w.daily.map((d) => ({ ...d, max_temp_c: null, precipitation_mm: null }));
-    return Promise.resolve({ weather: w, is_fallback: false });
-  };
-  const r = await call({ ...base, crop: 'sugarcane', growthStage: 'germination' }, deps);
-  assertEq(r.json.assessmentStatus, 'insufficient_data', 'assessmentStatus');
-  assertEq(r.json.insufficientReason, 'unassessable', 'reason');
-  assertEq(r.json.risks, [], 'risks');
+Deno.test('not-assessed list is limited to what is relevant to the crop and stage', async () => {
+  const w = await call({ ...base, crop: 'wheat', growthStage: 'early_growth' }, makeDeps());
+  assertEq(ids(w.json.notAssessedRisks), ['water_stress', 'waterlogging', 'wheat_frost_damage', 'crop_disease'], 'wheat early growth');
+  const s = await call({ ...base, crop: 'sugarcane', growthStage: 'germination' }, makeDeps());
+  assertEq(ids(s.json.notAssessedRisks), ['water_stress', 'waterlogging', 'sugarcane_frost_damage', 'crop_disease'], 'sugarcane germination');
+  for (const n of [...w.json.notAssessedRisks, ...s.json.notAssessedRisks]) {
+    assertTrue(typeof n.id === 'string' && typeof n.name === 'string' && typeof n.reason === 'string' && typeof n.explanation === 'string', 'object shape');
+  }
 });
 
 Deno.test('contract stage name CRI is accepted and mapped', async () => {
@@ -249,4 +364,8 @@ Deno.test('Gemini output with unknown rule id or bad JSON is rejected', () => {
   assertTrue(parseGeminiExplanation(ok, ['a'], '') !== null, 'valid output accepted');
   assertEq(parseGeminiExplanation(ok, ['b'], ''), null, 'unknown rule id rejected');
   assertEq(parseGeminiExplanation('not json', ['a'], ''), null, 'bad JSON rejected');
+  // With only weather warnings (no input risks), any risk item from Gemini is invented -> rejected.
+  assertEq(parseGeminiExplanation(ok, [], ''), null, 'invented risk rejected when no risks were given');
+  const none = '{"summary":"s","risks":[],"actions":["do x"]}';
+  assertTrue(parseGeminiExplanation(none, [], '') !== null, 'empty risks accepted');
 });

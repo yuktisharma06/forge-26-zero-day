@@ -36,6 +36,19 @@ export interface GeminiRiskInput {
   approved_action: string;
 }
 
+/** An informational weather warning. It is NOT a crop risk and has no severity. */
+export interface GeminiWarningInput {
+  id: string;
+  name: string;
+  dates: string[];
+  peak_value: number;
+  unit: string;
+  message: string;
+  caveat: string;
+  /** The only action Gemini may restate for this warning. */
+  approved_action: string;
+}
+
 export interface GeminiExplanation {
   summary: string;
   risks: { rule_id: string; title: string; reason: string }[];
@@ -54,6 +67,8 @@ export interface ExplainArgs {
   stageLabel: string;
   locationName: string;
   risks: GeminiRiskInput[];
+  /** Informational weather warnings (may be empty). */
+  warnings?: GeminiWarningInput[];
   timeoutMs?: number;
 }
 
@@ -65,6 +80,8 @@ STRICT RULES
 - Each risk is a screening signal from a published reference level, not confirmed damage. Never say damage will happen. Say it "may" be affected.
 - If applicability_note or caveats say the level is a general guide, comes from another region, or is not a damage threshold, say so briefly in simple words. Do not present the level as a proven damage point.
 - Do not change or restate the severity in a different strength. Do not add risks that are not in the JSON.
+- The JSON may contain "weather_warnings". They are informational weather alerts, NOT crop risks and they have no severity. Never call a warning a risk. Never say a warning means crop damage, yield loss, waterlogging, flooding, frost injury or disease. Keep the meaning of its caveat.
+- The "risks" array in your answer may only contain items whose rule_id is in the input "risks". If the input "risks" is empty, answer with "risks": [].
 - For "actions", rewrite ONLY the approved_action texts in simpler words. Do not invent new actions. Do not merge in advice from your own knowledge.
 - Use simple words, short sentences, no jargon.
 - Write in the requested language ("en" = English, "hi" = Hindi in Devanagari).
@@ -76,8 +93,9 @@ export async function explainRisks(args: ExplainArgs): Promise<ExplainResult> {
   if (!args.apiKey) {
     return { ok: false, reason: 'AI_NOT_CONFIGURED' };
   }
-  if (args.risks.length === 0) {
-    return { ok: false, reason: 'NO_RISKS' };
+  const warnings = args.warnings ?? [];
+  if (args.risks.length === 0 && warnings.length === 0) {
+    return { ok: false, reason: 'NO_FINDINGS' };
   }
 
   const userPayload = JSON.stringify({
@@ -86,6 +104,7 @@ export async function explainRisks(args: ExplainArgs): Promise<ExplainResult> {
     growth_stage: args.stageLabel,
     location: args.locationName,
     risks: args.risks,
+    weather_warnings: warnings,
   });
 
   const url =
@@ -132,9 +151,10 @@ export async function explainRisks(args: ExplainArgs): Promise<ExplainResult> {
     return { ok: false, reason: 'AI_EMPTY_RESPONSE' };
   }
 
-  const approvedPool = args.risks
-    .map((r) => `${r.approved_action} ${r.weather_condition} ${r.forecast_period} ${r.risk_name}`)
-    .join(' ');
+  const approvedPool = [
+    ...args.risks.map((r) => `${r.approved_action} ${r.weather_condition} ${r.forecast_period} ${r.risk_name}`),
+    ...warnings.map((w) => `${w.approved_action} ${w.message} ${w.caveat} ${w.name} ${w.peak_value} ${w.unit} ${w.dates.join(' ')}`),
+  ].join(' ');
   const parsed = parseGeminiExplanation(
     text,
     args.risks.map((r) => r.rule_id),

@@ -6,6 +6,7 @@
 // Gemini is not used (no risks, insufficient data, or Gemini unavailable).
 // =============================================================================
 
+import type { WarningGroup } from '../weather-warnings/index.ts';
 import type {
   CropType,
   DetectedRisk,
@@ -204,14 +205,43 @@ export function advisoryFromRules(
   };
 }
 
+/** Rule-written advisory for informational weather warnings (no crop-damage claims). */
+export function advisoryFromWarnings(
+  groups: WarningGroup[],
+  crop: CropType,
+  stage: GrowthStage,
+  lang: Language,
+): AdvisoryView {
+  const crops = CROP_LABEL[crop][lang];
+  const stageName = STAGE_LABEL[stage][lang];
+  const items = groups.map((g) => `${g.name} (${formatPeriod(g.dates, lang)})`).join(lang === 'hi' ? '; ' : '; ');
+  const summary = lang === 'hi'
+    ? `आपके ${crops} (${stageName}) के लिए पूर्वानुमान में मौसम चेतावनी: ${items}। ये केवल मौसम की चेतावनियां हैं, फसल को नुकसान की पुष्टि नहीं।`
+    : `Weather alerts in the forecast for your ${crops} at the ${stageName} stage: ${items}. These are weather alerts, not confirmed crop damage.`;
+  return {
+    summary,
+    actions: warningActions(groups),
+    language: lang,
+    writtenBy: 'rules',
+    disclaimer: DISCLAIMER[lang],
+  };
+}
+
+export function warningActions(groups: WarningGroup[]): string[] {
+  return [...new Set(groups.map((g) => g.action))].slice(0, 6);
+}
+
 export function advisoryFromAi(
   risks: RiskView[],
   explanation: GeminiExplanation,
   lang: Language,
+  fallbackActions: string[] = [],
 ): AdvisoryView {
   return {
     summary: explanation.summary,
-    actions: explanation.actions.length > 0 ? explanation.actions : uniqueActions(risks),
+    actions: explanation.actions.length > 0
+      ? explanation.actions
+      : (risks.length > 0 ? uniqueActions(risks) : fallbackActions),
     language: lang,
     writtenBy: 'ai',
     disclaimer: DISCLAIMER[lang],
@@ -227,8 +257,8 @@ export function advisoryNoRisk(
   const crops = CROP_LABEL[crop][lang];
   const stageName = STAGE_LABEL[stage][lang];
   const summary = lang === 'hi'
-    ? `अगले ${days} दिनों के पूर्वानुमान में आपके ${crops} (${stageName}) के लिए, हमारे पास मौजूद नियमों के अनुसार, कोई बड़ा मौसम जोखिम नहीं मिला। पूर्वानुमान पर नजर रखें।`
-    : `Based on the rules we have, no significant weather risk was found for your ${crops} at the ${stageName} stage in the next ${days} days. Keep watching the forecast.`;
+    ? `अगले ${days} दिनों के पूर्वानुमान में आपके ${crops} (${stageName}) के लिए कोई मौसम चेतावनी नहीं मिली। इसका मतलब यह नहीं कि कोई जोखिम नहीं है: कुछ स्थितियों का आकलन उपलब्ध आंकड़ों से संभव नहीं है (नीचे सूची देखें)। पूर्वानुमान पर नजर रखें।`
+    : `No weather alerts were found in the next ${days} days of the forecast for your ${crops} at the ${stageName} stage. This does not mean there is no risk: some conditions cannot be assessed from the available data (see the list). Keep watching the forecast.`;
   return { summary, actions: [], language: lang, writtenBy: 'rules', disclaimer: DISCLAIMER[lang] };
 }
 

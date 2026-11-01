@@ -25,12 +25,16 @@ import { explainRisks, type ExplainArgs, type ExplainResult } from '../_shared/a
 import {
   advisoryFromAi,
   advisoryFromRules,
+  advisoryFromWarnings,
   advisoryInsufficient,
   advisoryNoRisk,
   toRiskView,
   toWeatherBlock,
+  warningActions,
   type RiskView,
 } from '../_shared/advisory/build.ts';
+import { evaluateWeatherWarnings, groupWarnings } from '../_shared/weather-warnings/index.ts';
+import { notAssessedFor } from '../_shared/not-assessed/index.ts';
 
 // ── Dependencies (injectable so tests need no network) ───────────────────────
 
@@ -189,7 +193,7 @@ export async function handleRequest(req: Request, deps: Deps = defaultDeps): Pro
     const weather = wr.weather;
     const isSample = wr.is_fallback;
 
-    const weatherWarnings: string[] = [];
+    const weatherDataWarnings: string[] = [];
     let weatherNote: string | null = null;
     let stale = false;
     if (isSample) {
@@ -197,14 +201,18 @@ export async function handleRequest(req: Request, deps: Deps = defaultDeps): Pro
         'Live weather could not be fetched. The figures shown are sample data for demonstration only and do NOT reflect real conditions.';
     } else {
       stale = isWeatherDataStale(weather);
-      if (stale) weatherWarnings.push('Weather data appears out of date.');
+      if (stale) weatherDataWarnings.push('Weather data appears out of date.');
       const missing = weatherDataCompletenessRatio(weather);
       if (missing > 0.3) {
-        weatherWarnings.push(`${Math.round(missing * 100)}% of weather values are missing. Reliability may be reduced.`);
+        weatherDataWarnings.push(`${Math.round(missing * 100)}% of weather values are missing. Reliability may be reduced.`);
       }
     }
 
-    // ── 3. Deterministic risk engine (live, fresh weather only) ─────────────
+    // ── 3. Deterministic assessment (live, fresh weather only) ──────────────
+    // Three separate outputs:
+    //   risks            validated crop risks with Low/Moderate/High severity
+    //   weatherWarnings  informational alerts, no severity, no damage claims
+    //   notAssessedRisks conditions the available data cannot assess
     let insufficient: InsufficientReason | null = null;
     let engine: RiskEngineResult | null = null;
     if (isSample) insufficient = 'sample_weather';
@@ -215,29 +223,34 @@ export async function handleRequest(req: Request, deps: Deps = defaultDeps): Pro
         return fail(400, 'INVALID_INPUT', engine.status_message ?? 'Invalid crop or growth stage.');
       }
       if (engine.status === 'insufficient_data') {
-        // Empty forecast vs. forecast present but missing every value the rules need.
         insufficient = weather.daily.length === 0 ? 'no_forecast' : 'unassessable';
-      } else if (engine.status === 'no_rules') {
-        insufficient = 'no_rules';
       }
     }
 
-    // The engine only returns risks it could evaluate; severity is always Low/Moderate/High.
     const triggered = engine ? engine.detected_risks : [];
 
-    // Risks the engine could not check. Shown so "no risk" is never read as "everything was checked".
-    const notAssessed = engine
-      ? engine.not_assessed.map((n) => ({
-          name: n.risk_name,
-          reason: n.reason,
-          explanation: n.explanation,
-        }))
-      : [];
+    const warningResult = insufficient
+      ? { warnings: [], daysWithMissingData: 0 }
+      : evaluateWeatherWarnings({
+          crop,
+          growth_stage: stage,
+          daily_forecast: weather.daily,
+          is_fallback: false,
+          is_stale: false,
+          language,
+        });
+    const weatherWarnings = warningResult.warnings;
+    const warningGroups = groupWarnings(weatherWarnings, language);
+
+    const notAssessed = insufficient ? [] : notAssessedFor(crop, stage, language);
 
     const notes: string[] = [];
-    const missingData = engine ? engine.not_assessed.filter((n) => n.reason === 'insufficient_data').length : 0;
-    if (triggered.length > 0 && missingData > 0) {
-      notes.push(`${missingData} risk check(s) could not be done because some weather values were missing.`);
+    if (!insufficient && warningResult.daysWithMissingData > 0) {
+      notes.push(
+        language === 'hi'
+          ? `${warningResult.daysWithMissingData} दिन के कुछ मौसम आंकड़े उपलब्ध नहीं थे, इसलिए उन दिनों की जांच छोड़ दी गई।`
+          : `Some weather values were missing on ${warningResult.daysWithMissingData} forecast day(s), so those checks were skipped for those days.`,
+      );
     }
 
     const base = {
@@ -246,7 +259,7 @@ export async function handleRequest(req: Request, deps: Deps = defaultDeps): Pro
       growthStage: stage,
       sowingDate,
       location: { name: locationName, latitude, longitude },
-      weather: toWeatherBlock(weather, isSample, weatherWarnings, weatherNote),
+      weather: toWeatherBlock(weather, isSample, weatherDataWarnings, weatherNote),
       notes,
       notAssessedRisks: notAssessed,
       generatedAt: new Date().toISOString(),
@@ -259,23 +272,28 @@ export async function handleRequest(req: Request, deps: Deps = defaultDeps): Pro
         assessmentStatus: 'insufficient_data',
         insufficientReason: insufficient,
         risks: [],
+        weatherWarnings: [],
         advisory: advisoryInsufficient(insufficient, language),
         aiStatus: 'skipped',
+        aiNote: null,
       });
     }
 
-    // ── Case B: assessed, nothing found ─────────────────────────────────────
-    if (triggered.length === 0) {
+    // ── Case B: assessed, nothing to report ─────────────────────────────────
+    if (triggered.length === 0 && weatherWarnings.length === 0) {
       return json(200, {
         ...base,
         assessmentStatus: 'no_significant_risk',
+        insufficientReason: null,
         risks: [],
+        weatherWarnings: [],
         advisory: advisoryNoRisk(crop, stage, weather.daily.length, language),
         aiStatus: 'skipped',
+        aiNote: null,
       });
     }
 
-    // ── Case C: risks found -> explain them ─────────────────────────────────
+    // ── Case C: risks and/or warnings found -> explain them ─────────────────
     const plainViews: RiskView[] = triggered.map((r) => toRiskView(r, language));
     const explainResult = await deps.explain({
       apiKey: deps.env('GEMINI_API_KEY'),
@@ -296,10 +314,23 @@ export async function handleRequest(req: Request, deps: Deps = defaultDeps): Pro
         caveats: r.caveats,
         approved_action: plainViews[i].preventiveAction,
       })),
+      warnings: warningGroups.map((g) => ({
+        id: g.id,
+        name: g.name,
+        dates: g.dates,
+        peak_value: g.peakValue,
+        unit: g.unit,
+        message: g.message,
+        caveat: g.caveat,
+        approved_action: g.action,
+      })),
     });
 
+    // Rule-based advisory is the default; Gemini text replaces it only if it passed validation.
     let risks = plainViews;
-    let advisory = advisoryFromRules(plainViews, crop, stage, language);
+    let advisory = triggered.length > 0
+      ? advisoryFromRules(plainViews, crop, stage, language)
+      : advisoryFromWarnings(warningGroups, crop, stage, language);
     let aiStatus: 'completed' | 'fallback' = 'fallback';
     let aiNote: string | null = explainResult.ok ? null : explainResult.reason;
 
@@ -309,15 +340,18 @@ export async function handleRequest(req: Request, deps: Deps = defaultDeps): Pro
         const ai = byId.get(r.rule_id);
         return toRiskView(r, language, ai ? { title: ai.title, reason: ai.reason } : undefined);
       });
-      advisory = advisoryFromAi(risks, explainResult.explanation, language);
+      advisory = advisoryFromAi(risks, explainResult.explanation, language, warningActions(warningGroups));
       aiStatus = 'completed';
       aiNote = null;
     }
 
+    // Warnings are rule-written and returned unchanged; Gemini never edits them.
     return json(200, {
       ...base,
       assessmentStatus: 'completed',
+      insufficientReason: null,
       risks,
+      weatherWarnings,
       advisory,
       aiStatus,
       aiNote,

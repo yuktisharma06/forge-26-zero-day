@@ -35,16 +35,8 @@ import type {
   ThresholdOperator,
   WeatherParameter,
 } from '../types.ts';
-import {
-  WHEAT_RISK_RULES,
-  WHEAT_STAGES,
-  WHEAT_UNSUPPORTED_RISKS,
-} from './wheat-rules.ts';
-import {
-  SUGARCANE_RISK_RULES,
-  SUGARCANE_STAGES,
-  SUGARCANE_UNSUPPORTED_RISKS,
-} from './sugarcane-rules.ts';
+import { WHEAT_RISK_RULES, WHEAT_STAGES } from './wheat-rules.ts';
+import { SUGARCANE_RISK_RULES, SUGARCANE_STAGES } from './sugarcane-rules.ts';
 
 // =============================================================================
 // Public API
@@ -60,12 +52,16 @@ export interface RiskEngineInput {
   is_fallback: boolean;
   /** true when the forecast dates look out of date (see isWeatherDataStale). */
   is_stale?: boolean;
+  /**
+   * Rule set to evaluate. Defaults to the validated rules in wheat-rules.ts and
+   * sugarcane-rules.ts (currently none). Used by tests and by future validated rules.
+   */
+  rules?: RiskRule[];
 }
 
 export type RiskEngineStatus =
-  | 'ok'                // engine ran; `risks` may be empty (= no risk flagged)
+  | 'ok'                // engine ran; `detected_risks` may be empty (including when no validated rules exist)
   | 'insufficient_data' // fallback/stale/empty weather, or no rule could be assessed
-  | 'no_rules'          // no rules defined for this crop + stage
   | 'invalid_input';    // crop/stage combination is not valid
 
 export interface RiskEngineResult {
@@ -134,28 +130,15 @@ export function runRiskEngine(input: RiskEngineInput): RiskEngineResult {
   }
 
   // ── Select rules for this crop and stage ───────────────────────────────────
-  const allRules = crop === 'wheat' ? WHEAT_RISK_RULES : SUGARCANE_RISK_RULES;
+  const allRules = input.rules ?? (crop === 'wheat' ? WHEAT_RISK_RULES : SUGARCANE_RISK_RULES);
   const rules = allRules.filter(
     (r) => r.crop === crop && r.growth_stages.includes(growth_stage),
   );
 
-  const unsupported: NotAssessedRisk[] = (
-    crop === 'wheat' ? WHEAT_UNSUPPORTED_RISKS : SUGARCANE_UNSUPPORTED_RISKS
-  )
-    .filter((u) => (u.stages as GrowthStage[]).includes(growth_stage))
-    .map((u) => ({
-      risk_name: u.risk_name,
-      reason: 'no_supported_data' as const,
-      explanation: u.explanation,
-    }));
-
+  // No validated rule applies: a valid result with no crop risks. Conditions we
+  // cannot assess are listed separately by the not-assessed module.
   if (rules.length === 0) {
-    return {
-      ...base,
-      not_assessed: unsupported,
-      status: 'no_rules',
-      status_message: `No verified risk rules exist for ${crop} at the '${growth_stage}' stage.`,
-    };
+    return { ...base, status: 'ok' };
   }
 
   // ── Evaluate ───────────────────────────────────────────────────────────────
@@ -176,8 +159,6 @@ export function runRiskEngine(input: RiskEngineInput): RiskEngineResult {
       });
     }
   }
-
-  notAssessed.push(...unsupported);
 
   // Nothing could be assessed at all → say so instead of implying "no risk".
   if (notAssessed.filter((n) => n.reason === 'insufficient_data').length === rules.length) {

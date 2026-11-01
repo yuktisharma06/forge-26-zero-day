@@ -153,3 +153,5 @@ supabase/.branches/
 functions.zip
 
 .vscode/
+*.zip
+share_tmp/
