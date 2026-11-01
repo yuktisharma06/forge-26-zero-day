@@ -315,7 +315,7 @@ Deno.test('not-assessed list is limited to what is relevant to the crop and stag
   const w = await call({ ...base, crop: 'wheat', growthStage: 'early_growth' }, makeDeps());
   assertEq(ids(w.json.notAssessedRisks), ['water_stress', 'waterlogging', 'wheat_frost_damage', 'crop_disease'], 'wheat early growth');
   const s = await call({ ...base, crop: 'sugarcane', growthStage: 'germination' }, makeDeps());
-  assertEq(ids(s.json.notAssessedRisks), ['water_stress', 'waterlogging', 'sugarcane_frost_damage', 'crop_disease'], 'sugarcane germination');
+  assertEq(ids(s.json.notAssessedRisks), ['water_stress', 'waterlogging', 'sugarcane_frost_damage', 'sugarcane_heat_damage', 'crop_disease'], 'sugarcane germination');
   for (const n of [...w.json.notAssessedRisks, ...s.json.notAssessedRisks]) {
     assertTrue(typeof n.id === 'string' && typeof n.name === 'string' && typeof n.reason === 'string' && typeof n.explanation === 'string', 'object shape');
   }
@@ -368,4 +368,31 @@ Deno.test('Gemini output with unknown rule id or bad JSON is rejected', () => {
   assertEq(parseGeminiExplanation(ok, [], ''), null, 'invented risk rejected when no risks were given');
   const none = '{"summary":"s","risks":[],"actions":["do x"]}';
   assertTrue(parseGeminiExplanation(none, [], '') !== null, 'empty risks accepted');
+});
+
+Deno.test('sugarcane_heat_damage is listed as not assessed at every sugarcane stage, and never for wheat', async () => {
+  for (const stage of ['germination', 'tillering', 'grand_growth', 'maturity_ripening']) {
+    const r = await call({ ...base, crop: 'sugarcane', growthStage: stage }, makeDeps());
+    const item = r.json.notAssessedRisks.find((x: { id: string }) => x.id === 'sugarcane_heat_damage');
+    assertTrue(item !== undefined, `sugarcane_heat_damage missing at ${stage}`);
+    assertEq(item.reason, 'no_validated_threshold', `reason at ${stage}`);
+  }
+  for (const stage of ['early_growth', 'crown_root', 'vegetative_growth', 'reproductive', 'grain_development_maturity']) {
+    const r = await call({ ...base, crop: 'wheat', growthStage: stage }, makeDeps());
+    assertTrue(!ids(r.json.notAssessedRisks).includes('sugarcane_heat_damage'), `wheat must not list sugarcane heat (${stage})`);
+  }
+});
+
+Deno.test('sugarcane heat warning and the heat-damage not-assessed item appear together', async () => {
+  const r = await call({ ...base, crop: 'sugarcane', growthStage: 'maturity_ripening' }, makeDeps({ rows: allDays({ max: 39 }) }));
+  assertTrue(r.json.weatherWarnings.length > 0, 'informational heat warning present');
+  assertEq(r.json.risks, [], 'still no crop risk');
+  assertTrue(ids(r.json.notAssessedRisks).includes('sugarcane_heat_damage'), 'heat damage listed as not assessed');
+});
+
+Deno.test('weather block uses dataQualityNotes and no longer has weather.warnings', async () => {
+  const r = await call({ ...base, crop: 'wheat', growthStage: 'early_growth' }, makeDeps());
+  assertTrue(Array.isArray(r.json.weather.dataQualityNotes), 'dataQualityNotes is an array');
+  assertTrue(!('warnings' in r.json.weather), 'old weather.warnings key must be gone');
+  assertTrue(Array.isArray(r.json.weatherWarnings), 'top-level weatherWarnings still exists');
 });
