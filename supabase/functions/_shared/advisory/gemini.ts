@@ -183,7 +183,7 @@ async function callOnce(args: ExplainArgs, body: string): Promise<Attempt> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': args.apiKey as string },
       body,
-      signal: AbortSignal.timeout(args.timeoutMs ?? 12_000),
+      signal: AbortSignal.timeout(args.timeoutMs ?? 25_000),
     });
   } catch (err) {
     // Do not log the request (it holds the key header). Log only the error name.
