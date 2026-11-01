@@ -73,7 +73,7 @@ export interface AdvisoryView {
 export function toWeatherBlock(
   weather: WeatherSummary,
   isSample: boolean,
-  warnings: string[],
+  dataQualityNotes: string[],
   note: string | null,
 ) {
   return {
@@ -96,7 +96,7 @@ export function toWeatherBlock(
     })),
     // Notes about the forecast data itself (stale / missing values). NOT weather alerts;
     // farmer-facing alerts are the top-level `weatherWarnings`.
-    warnings,
+    dataQualityNotes,
     note,
   };
 }

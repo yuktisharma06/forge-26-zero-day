@@ -370,14 +370,13 @@ Deno.test('Gemini output with unknown rule id or bad JSON is rejected', () => {
   assertTrue(parseGeminiExplanation(none, [], '') !== null, 'empty risks accepted');
 });
 
-Deno.test('weather.warnings holds data-quality notes only and is separate from weatherWarnings', async () => {
+Deno.test('weather.dataQualityNotes holds data-quality notes only and is separate from weatherWarnings', async () => {
   const r = await call({ ...base, crop: 'wheat', growthStage: 'early_growth' }, makeDeps());
-  assertTrue(Array.isArray(r.json.weather.warnings), 'weather.warnings is an array (contract field)');
-  assertTrue(!('dataQualityNotes' in r.json.weather), 'no renamed key');
-  assertTrue(Array.isArray(r.json.weatherWarnings), 'top-level weatherWarnings exists');
+  assertTrue(Array.isArray(r.json.weather.dataQualityNotes), 'weather.dataQualityNotes is an array (contract field)');
+  assertTrue(!('warnings' in r.json.weather), 'old weather.warnings key must be gone');  assertTrue(Array.isArray(r.json.weatherWarnings), 'top-level weatherWarnings exists');
   const heavy = await call({ ...base, crop: 'wheat', growthStage: 'early_growth' }, makeDeps({ rows: withDays({ 2: { rain: 130 } }) }));
-  assertEq(heavy.json.weather.warnings, [], 'a weather alert is not copied into weather.warnings');
-  assertEq(heavy.json.weatherWarnings.length, 1, 'the alert is only in weatherWarnings');
+  assertEq(heavy.json.weather.dataQualityNotes, [], 'a weather alert is not copied into weather.dataQualityNotes');
+  assertTrue(!('warnings' in heavy.json.weather), 'old weather.warnings key must be gone');
 });
 
 // ── Gemini output guards (Phase D rules, enforced in code and not only in the prompt) ──

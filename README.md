@@ -110,7 +110,7 @@ supabase/
     _shared/
       advisory/                response building, Gemini helper, fixed EN/HI text
       risk-engine/             deterministic severity engine (no rules enabled)
-      weather-warnings/        informational IMD rainfall and heat alerts
+      weather.dataQualityNotes        informational IMD rainfall and heat alerts
       not-assessed/            conditions listed as not assessed
       weather/, geocoding/     Open-Meteo clients
 ```

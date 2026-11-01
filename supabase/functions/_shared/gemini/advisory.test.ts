@@ -1,8 +1,10 @@
 // Run with: node --experimental-strip-types --test supabase/functions/_shared/gemini/advisory.test.ts
+// Uses TEST_RULES (test-rules.ts): fixture rules, because the production rule files are empty.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { runRiskEngine } from '../risk-engine/index.ts';
+import { TEST_RULES } from './test-rules.ts';
 import { generateAiAdvisory } from './advisory.ts';
 import { validateAiOutput, normalizeDigits } from './guard.ts';
 import { buildFacts, buildRequestBody } from './prompt.ts';
@@ -14,11 +16,11 @@ function day(date: string, o: Partial<DailyForecast> = {}): DailyForecast {
 }
 // One High heat risk + one Low heavy-rain risk, both on 2026-11-04.
 const hotWet = runRiskEngine({
-  crop: 'wheat', growth_stage: 'grain_development_maturity', is_fallback: false,
+  crop: 'wheat', growth_stage: 'grain_development_maturity', is_fallback: false, rules: TEST_RULES,
   daily_forecast: [day('2026-11-02'), day('2026-11-03', { max_temp_c: 33 }), day('2026-11-04', { max_temp_c: 36, precipitation_mm: 70 })],
 });
-const calm = runRiskEngine({ crop: 'wheat', growth_stage: 'grain_development_maturity', is_fallback: false, daily_forecast: [day('2026-11-02')] });
-const noData = runRiskEngine({ crop: 'wheat', growth_stage: 'grain_development_maturity', is_fallback: true, daily_forecast: [day('2026-11-02')] });
+const calm = runRiskEngine({ crop: 'wheat', growth_stage: 'grain_development_maturity', is_fallback: false, rules: TEST_RULES, daily_forecast: [day('2026-11-02')] });
+const noData = runRiskEngine({ crop: 'wheat', growth_stage: 'grain_development_maturity', is_fallback: true, rules: TEST_RULES, daily_forecast: [day('2026-11-02')] });
 
 const HEAT = 'wheat_grain_fill_heat';
 const RAIN = 'wheat_heavy_rainfall_event';
