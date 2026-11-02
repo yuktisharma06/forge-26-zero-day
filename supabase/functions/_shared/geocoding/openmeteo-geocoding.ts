@@ -48,7 +48,7 @@ interface OpenMeteoGeoResponse {
  *
  * Never returns invented coordinates.
  */
-export async function geocodeLocation(placeName: string): Promise<GeocodingResult> {
+async function geocodeOnce(placeName: string): Promise<GeocodingResult> {
   const trimmed = placeName.trim();
   if (!trimmed) {
     throw new Error('Place name must not be empty.');
@@ -112,4 +112,71 @@ export async function geocodeLocation(placeName: string): Promise<GeocodingResul
     admin1: best.admin1,
     admin2: best.admin2,
   };
+}
+
+// -----------------------------------------------------------------------------
+// Tolerant lookup
+// -----------------------------------------------------------------------------
+// Open-Meteo matches PLACE NAMES, not descriptive phrases. "Saharanpur City" or
+// "Saharanpur, Uttar Pradesh" find nothing even though "Saharanpur" works.
+// So we try the text as typed first, then simpler versions of it.
+
+const GENERIC_SUFFIXES = new Set([
+  'city', 'town', 'district', 'tehsil', 'tahsil', 'block', 'village', 'urban',
+]);
+
+/**
+ * Returns the names to try, most specific first, without duplicates.
+ *   "Saharanpur City"           -> ["Saharanpur City", "Saharanpur"]
+ *   "Saharanpur, Uttar Pradesh" -> ["Saharanpur, Uttar Pradesh", "Saharanpur"]
+ *   "Deoband"                   -> ["Deoband"]
+ * A name is never stripped down to nothing.
+ */
+export function locationCandidates(input: string): string[] {
+  const original = input.trim().replace(/\s+/g, ' ');
+  if (!original) return [];
+
+  const out: string[] = [original];
+  const add = (v: string) => {
+    const t = v.trim();
+    if (t && !out.some((x) => x.toLowerCase() === t.toLowerCase())) out.push(t);
+  };
+
+  const firstPart = original.split(',')[0].trim();
+  add(firstPart);
+
+  // Remove trailing generic words ("City", "District", ...) but keep at least one word.
+  const words = firstPart.split(' ');
+  while (words.length > 1 && GENERIC_SUFFIXES.has(words[words.length - 1].toLowerCase())) {
+    words.pop();
+    add(words.join(' '));
+  }
+  return out;
+}
+
+/**
+ * Resolves a place name to coordinates, trying simpler versions of the text if
+ * the exact text is not found. Network or HTTP failures are NOT retried with
+ * other names: they are thrown straight away so an outage is never hidden.
+ * If nothing matches, throws an error starting with "Location not found".
+ */
+export async function geocodeLocation(placeName: string): Promise<GeocodingResult> {
+  const candidates = locationCandidates(placeName);
+  if (candidates.length === 0) {
+    throw new Error('Place name must not be empty.');
+  }
+
+  for (const candidate of candidates) {
+    try {
+      return await geocodeOnce(candidate);
+    } catch (err) {
+      const notFound = err instanceof Error && err.message.startsWith('Location not found');
+      if (!notFound) throw err;
+      // otherwise: try the next, simpler name
+    }
+  }
+
+  throw new Error(
+    `Location not found: "${placeName.trim()}". Please check the spelling or try a simpler name (e.g. "Saharanpur").`,
+  );
 }
