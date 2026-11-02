@@ -315,7 +315,7 @@ Deno.test('not-assessed list is limited to what is relevant to the crop and stag
   const w = await call({ ...base, crop: 'wheat', growthStage: 'early_growth' }, makeDeps());
   assertEq(ids(w.json.notAssessedRisks), ['water_stress', 'waterlogging', 'wheat_frost_damage', 'crop_disease'], 'wheat early growth');
   const s = await call({ ...base, crop: 'sugarcane', growthStage: 'germination' }, makeDeps());
-  assertEq(ids(s.json.notAssessedRisks), ['water_stress', 'waterlogging', 'sugarcane_frost_damage', 'crop_disease'], 'sugarcane germination');
+    assertEq(ids(s.json.notAssessedRisks), ['water_stress', 'waterlogging', 'sugarcane_frost_damage', 'sugarcane_heat_damage', 'crop_disease'], 'sugarcane germination');
   for (const n of [...w.json.notAssessedRisks, ...s.json.notAssessedRisks]) {
     assertTrue(typeof n.id === 'string' && typeof n.name === 'string' && typeof n.reason === 'string' && typeof n.explanation === 'string', 'object shape');
   }
